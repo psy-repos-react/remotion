@@ -1,5 +1,8 @@
 import {useContext} from 'react';
 import {getRemotionEnvironment} from './get-remotion-environment.js';
+import type {LogLevel} from './log.js';
+import {Log} from './log.js';
+import {playbackLogging} from './playback-logging.js';
 import {PreloadContext, setPreloads} from './prefetch-state.js';
 
 export const usePreload = (src: string): string => {
@@ -48,7 +51,6 @@ const getBlobFromReader = async ({
 }): Promise<Blob> => {
 	let receivedLength = 0;
 	const chunks = [];
-	// eslint-disable-next-line no-constant-condition
 	while (true) {
 		const {done, value} = await reader.read();
 
@@ -76,8 +78,8 @@ const getBlobFromReader = async ({
 	});
 };
 
-/**
- * @description When you call the preFetch() function, an asset will be fetched and kept in memory so it is ready when you want to play it in a <Player>.
+/*
+ * @description When you call the prefetch() function, an asset will be fetched and kept in memory so it is ready when you want to play it in a <Player>.
  * @see [Documentation](https://www.remotion.dev/docs/prefetch)
  */
 export const prefetch = (
@@ -86,9 +88,12 @@ export const prefetch = (
 		method?: 'blob-url' | 'base64';
 		contentType?: string;
 		onProgress?: PrefetchOnProgress;
+		credentials?: RequestCredentials;
+		logLevel?: LogLevel;
 	},
 ): FetchAndPreload => {
 	const method = options?.method ?? 'blob-url';
+	const logLevel = options?.logLevel ?? 'info';
 
 	if (getRemotionEnvironment().isRendering) {
 		return {
@@ -96,6 +101,8 @@ export const prefetch = (
 			waitUntilDone: () => Promise.resolve(src),
 		};
 	}
+
+	Log.verbose(logLevel, `[prefetch] Starting prefetch ${src}`);
 
 	let canceled = false;
 	let objectUrl: string | null = null;
@@ -112,6 +119,7 @@ export const prefetch = (
 
 	fetch(src, {
 		signal: controller.signal,
+		credentials: options?.credentials ?? undefined,
 	})
 		.then((res) => {
 			canBeAborted = false;
@@ -174,6 +182,13 @@ export const prefetch = (
 				return;
 			}
 
+			playbackLogging({
+				logLevel,
+				tag: 'prefetch',
+				message: `Finished prefetch ${src} with method ${method}`,
+				mountTime: null,
+			});
+
 			objectUrl = url as string;
 
 			setPreloads((p) => ({
@@ -183,11 +198,21 @@ export const prefetch = (
 			resolve(objectUrl);
 		})
 		.catch((err) => {
+			if (err?.message.includes('free() called')) {
+				return;
+			}
+
 			reject(err);
 		});
 
 	return {
 		free: () => {
+			playbackLogging({
+				logLevel,
+				tag: 'prefetch',
+				message: `Freeing ${src}`,
+				mountTime: null,
+			});
 			if (objectUrl) {
 				if (method === 'blob-url') {
 					URL.revokeObjectURL(objectUrl);
@@ -202,8 +227,8 @@ export const prefetch = (
 				canceled = true;
 				if (canBeAborted) {
 					try {
-						controller.abort();
-					} catch (e) {}
+						controller.abort(new Error('free() called'));
+					} catch {}
 				}
 			}
 		},

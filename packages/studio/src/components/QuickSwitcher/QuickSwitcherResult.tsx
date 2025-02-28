@@ -1,5 +1,5 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
-import {getBackgroundFromHoverState, LIGHT_TEXT} from '../../helpers/colors';
+import {LIGHT_TEXT, getBackgroundFromHoverState} from '../../helpers/colors';
 import {useKeybinding} from '../../helpers/use-keybinding';
 import {StillIcon} from '../../icons/still';
 import {FilmIcon} from '../../icons/video';
@@ -58,8 +58,8 @@ const labelContainer: React.CSSProperties = {
 };
 
 export const QuickSwitcherResult: React.FC<{
-	result: TQuickSwitcherResult;
-	selected: boolean;
+	readonly result: TQuickSwitcherResult;
+	readonly selected: boolean;
 }> = ({result, selected}) => {
 	const [hovered, setIsHovered] = useState(false);
 	const ref = useRef<HTMLDivElement>(null);

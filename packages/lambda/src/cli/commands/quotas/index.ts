@@ -1,22 +1,30 @@
 import {CliInternals} from '@remotion/cli';
+import {BINARY_NAME} from '@remotion/lambda-client/constants';
 import type {LogLevel} from '@remotion/renderer';
-import {BINARY_NAME} from '../../../defaults';
 import {INCREASE_SUBCOMMAND, quotasIncreaseCommand} from './increase';
 import {quotasListCommand} from './list';
 export const QUOTAS_COMMAND = 'quotas';
 
-const printHelp = () => {
-	CliInternals.Log.info('Available commands:');
-	CliInternals.Log.info();
-	CliInternals.Log.info(`npx ${BINARY_NAME} ${QUOTAS_COMMAND}`);
+const printHelp = (logLevel: LogLevel) => {
+	CliInternals.Log.info({indent: false, logLevel}, 'Available commands:');
+	CliInternals.Log.info({indent: false, logLevel});
 	CliInternals.Log.info(
+		{indent: false, logLevel},
+		`npx ${BINARY_NAME} ${QUOTAS_COMMAND}`,
+	);
+	CliInternals.Log.info(
+		{indent: false, logLevel},
 		CliInternals.chalk.gray('List relevant AWS Lambda quotas.'),
 	);
-	CliInternals.Log.info();
+	CliInternals.Log.info({indent: false, logLevel});
 	CliInternals.Log.info(
+		{indent: false, logLevel},
 		`npx ${BINARY_NAME} ${QUOTAS_COMMAND} ${INCREASE_SUBCOMMAND}`,
 	);
-	CliInternals.Log.info(CliInternals.chalk.gray('Increase Lambda quotas.'));
+	CliInternals.Log.info(
+		{indent: false, logLevel},
+		CliInternals.chalk.gray('Increase Lambda quotas.'),
+	);
 };
 
 export const quotasCommand = (args: string[], logLevel: LogLevel) => {
@@ -28,6 +36,9 @@ export const quotasCommand = (args: string[], logLevel: LogLevel) => {
 		return quotasIncreaseCommand(logLevel);
 	}
 
-	CliInternals.Log.error('Subcommand ' + args[0] + ' not found.');
-	printHelp();
+	CliInternals.Log.error(
+		{indent: false, logLevel},
+		'Subcommand ' + args[0] + ' not found.',
+	);
+	printHelp(logLevel);
 };

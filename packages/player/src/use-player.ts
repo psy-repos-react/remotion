@@ -3,6 +3,7 @@ import {useCallback, useContext, useMemo, useRef, useState} from 'react';
 import {Internals} from 'remotion';
 import {PlayerEventEmitterContext} from './emitter-context.js';
 import type {PlayerEmitter} from './event-emitter.js';
+import {useFrameImperative} from './use-frame-imperative.js';
 
 type UsePlayerMethods = {
 	frameBack: (frames: number) => void;
@@ -11,17 +12,15 @@ type UsePlayerMethods = {
 	isFirstFrame: boolean;
 	emitter: PlayerEmitter;
 	playing: boolean;
-	play: (e?: SyntheticEvent) => void;
+	play: (e?: SyntheticEvent | PointerEvent) => void;
 	pause: () => void;
 	pauseAndReturnToPlayStart: () => void;
 	seek: (newFrame: number) => void;
 	getCurrentFrame: () => number;
 	isPlaying: () => boolean;
 	hasPlayed: boolean;
-	/**
-	 * @deprecated Remotion internal API
-	 */
-	remotionInternal_currentFrameRef: React.MutableRefObject<number>;
+	isBuffering: () => boolean;
+	toggle: (e?: SyntheticEvent | PointerEvent) => void;
 };
 
 export const usePlayer = (): UsePlayerMethods => {
@@ -50,6 +49,15 @@ export const usePlayer = (): UsePlayerMethods => {
 		throw new TypeError('Expected Player event emitter context');
 	}
 
+	const bufferingContext = useContext(Internals.BufferingContextReact);
+	if (!bufferingContext) {
+		throw new Error(
+			'Missing the buffering context. Most likely you have a Remotion version mismatch.',
+		);
+	}
+
+	const {buffering} = bufferingContext;
+
 	const seek = useCallback(
 		(newFrame: number) => {
 			if (video?.id) {
@@ -64,7 +72,7 @@ export const usePlayer = (): UsePlayerMethods => {
 	);
 
 	const play = useCallback(
-		(e?: SyntheticEvent) => {
+		(e?: SyntheticEvent | PointerEvent) => {
 			if (imperativePlaying.current) {
 				return;
 			}
@@ -86,7 +94,9 @@ export const usePlayer = (): UsePlayerMethods => {
 			 * Play audios and videos directly here so they can benefit from
 			 * being triggered by a click
 			 */
-			audioAndVideoTags.current.forEach((a) => a.play());
+			audioAndVideoTags.current.forEach((a) =>
+				a.play('player play() was called and playing audio from a click'),
+			);
 
 			imperativePlaying.current = true;
 			setPlaying(true);
@@ -172,6 +182,19 @@ export const usePlayer = (): UsePlayerMethods => {
 		[videoId, imperativePlaying, lastFrame, setFrame],
 	);
 
+	const getCurrentFrame = useFrameImperative();
+
+	const toggle = useCallback(
+		(e?: SyntheticEvent | PointerEvent) => {
+			if (imperativePlaying.current) {
+				pause();
+			} else {
+				play(e);
+			}
+		},
+		[imperativePlaying, pause, play],
+	);
+
 	const returnValue: UsePlayerMethods = useMemo(() => {
 		return {
 			frameBack,
@@ -183,25 +206,30 @@ export const usePlayer = (): UsePlayerMethods => {
 			pause,
 			seek,
 			isFirstFrame,
-			getCurrentFrame: () => frameRef.current as number,
-			isPlaying: () => imperativePlaying.current as boolean,
+			getCurrentFrame,
+			isPlaying: () => imperativePlaying.current,
+			isBuffering: () => buffering.current,
 			pauseAndReturnToPlayStart,
 			hasPlayed,
 			remotionInternal_currentFrameRef: frameRef,
+			toggle,
 		};
 	}, [
+		buffering,
+		emitter,
 		frameBack,
 		frameForward,
-		isLastFrame,
-		emitter,
-		playing,
-		play,
-		pause,
-		seek,
-		isFirstFrame,
-		pauseAndReturnToPlayStart,
-		imperativePlaying,
+		getCurrentFrame,
 		hasPlayed,
+		imperativePlaying,
+		isFirstFrame,
+		isLastFrame,
+		pause,
+		pauseAndReturnToPlayStart,
+		play,
+		playing,
+		seek,
+		toggle,
 	]);
 
 	return returnValue;

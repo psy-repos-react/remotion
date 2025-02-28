@@ -1,7 +1,7 @@
+import os
 
 from remotion_lambda import RenderStillParams, Privacy, ValidStillImageFormats
 from remotion_lambda import RemotionClient
-import os
 from dotenv import load_dotenv
 
 
@@ -42,3 +42,7 @@ if render_response:
     print("Bucket name:", render_response.bucket_name)
     print("Render done! File at ", render_response.url)
     print("Cost Info: ", render_response.estimated_price)
+else:
+    print("Render failed!")
+    # exit 1
+    exit(1)

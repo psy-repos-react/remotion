@@ -49,7 +49,7 @@ export function puppeteerEvaluateWithCatchAndTimeout<ReturnType>({
 	pageFunction,
 	timeoutInMilliseconds,
 }: PuppeteerCatchOptions): Promise<{value: ReturnType; size: number}> {
-	let timeout: NodeJS.Timeout | null = null;
+	let timeout: Timer | null = null;
 	return Promise.race([
 		new Promise<{value: ReturnType; size: number}>((_, reject) => {
 			timeout = setTimeout(() => {
@@ -98,7 +98,7 @@ export async function puppeteerEvaluateWithCatch<ReturnType>({
 	try {
 		// eslint-disable-next-line no-new-func
 		new Function('(' + functionText + ')');
-	} catch (error) {
+	} catch {
 		// This means we might have a function shorthand. Try another
 		// time prefixing 'function '.
 		if (functionText.startsWith('async '))
@@ -108,7 +108,7 @@ export async function puppeteerEvaluateWithCatch<ReturnType>({
 		try {
 			// eslint-disable-next-line no-new-func
 			new Function('(' + functionText + ')');
-		} catch (err) {
+		} catch {
 			// We tried hard to serialize, but there's a weird beast here.
 			throw new Error('Passed function is not well-serializable!');
 		}
@@ -152,7 +152,9 @@ export async function puppeteerEvaluateWithCatch<ReturnType>({
 				stackFrame: parseStack(
 					(exceptionDetails.exception?.description as string).split('\n'),
 				),
+				chunk: null,
 			});
+			page.close();
 			throw err;
 		}
 
@@ -191,7 +193,6 @@ function convertArgument(arg: unknown): unknown {
 	}
 
 	if (typeof arg === 'bigint')
-		// eslint-disable-line valid-typeof
 		return {unserializableValue: `${arg.toString()}n`};
 	if (Object.is(arg, -0)) return {unserializableValue: '-0'};
 	if (Object.is(arg, Infinity)) return {unserializableValue: 'Infinity'};

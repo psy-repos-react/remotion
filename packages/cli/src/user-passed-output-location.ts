@@ -1,9 +1,9 @@
 import {getDefaultOutLocation} from '@remotion/studio-server';
 import {ConfigInternals} from './config';
-import {parsedCli} from './parse-command-line';
+import {parsedCli} from './parsed-cli';
 
 export const getUserPassedOutputLocation = (
-	args: string[],
+	args: (string | number)[],
 	uiPassedOutName: string | null,
 ) => {
 	const filename =
@@ -12,7 +12,7 @@ export const getUserPassedOutputLocation = (
 		parsedCli.output ??
 		ConfigInternals.getOutputLocation();
 
-	return filename;
+	return filename ? String(filename) : null;
 };
 
 export const getOutputLocation = ({
@@ -21,11 +21,13 @@ export const getOutputLocation = ({
 	args,
 	type,
 	outputLocationFromUi,
+	compositionDefaultOutName,
 }: {
 	compositionId: string;
 	outputLocationFromUi: string | null;
+	compositionDefaultOutName: string | null;
 	defaultExtension: string;
-	args: string[];
+	args: (string | number)[];
 	type: 'asset' | 'sequence';
 }) => {
 	if (
@@ -43,6 +45,7 @@ export const getOutputLocation = ({
 			compositionName: compositionId,
 			defaultExtension,
 			type,
+			compositionDefaultOutName,
 		})
 	);
 };

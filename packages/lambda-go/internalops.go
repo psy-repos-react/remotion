@@ -37,8 +37,10 @@ func constructRenderInternals(options *RemotionOptions) (*renderInternalOptions,
 		Webhook:                        options.Webhook,
 		ForceHeight:                    options.ForceHeight,
 		OffthreadVideoCacheSizeInBytes: options.OffthreadVideoCacheSizeInBytes,
+		OffthreadVideoThreads:          options.OffthreadVideoThreads,
 		X264Preset:                     options.X264Preset,
 		ForceWidth:                     options.ForceWidth,
+		ApiKey:                         options.ApiKey,
 		BucketName:                     options.BucketName,
 		AudioCodec:                     options.AudioCodec,
 		ForceBucketName:                options.ForceBucketName,
@@ -49,6 +51,7 @@ func constructRenderInternals(options *RemotionOptions) (*renderInternalOptions,
 	}
 
 	internalParams.Muted = options.Muted
+	internalParams.PreferLossless = options.PreferLossless
 	internalParams.Overwrite = options.Overwrite
 
 	if options.RendererFunctionName == "" {
@@ -70,14 +73,18 @@ func constructRenderInternals(options *RemotionOptions) (*renderInternalOptions,
 	} else {
 		internalParams.ImageFormat = options.ImageFormat
 	}
-	internalParams.Crf = options.Crf
+	if options.Crf == 0 {
+		internalParams.Crf = nil
+	} else {
+		internalParams.Crf = options.Crf
+	}
 	if options.Privacy == "" {
 		internalParams.Privacy = "public"
 	} else {
 		internalParams.Privacy = options.Privacy
 	}
 	if options.ColorSpace == "" {
-		internalParams.ColorSpace = "default"
+		internalParams.ColorSpace = nil
 	} else {
 		internalParams.ColorSpace = options.ColorSpace
 	}
@@ -141,6 +148,11 @@ func constructRenderInternals(options *RemotionOptions) (*renderInternalOptions,
 	} else {
 		internalParams.EnvVariables = options.EnvVariables
 	}
+	if options.Metadata == nil {
+		internalParams.Metadata = map[string]interface{}{}
+	} else {
+		internalParams.Metadata = options.Metadata
+	}
 
 	return &internalParams, nil
 }
@@ -154,9 +166,15 @@ func constructGetProgressInternals(options *RenderConfig) (*renderProgressIntern
 		return nil, validationErrors
 	}
 
+	logLevel := "info"
+	if options.LogLevel != "" {
+		logLevel = options.LogLevel
+	}
+
 	internalParams := renderProgressInternalConfig{
 		RenderId:   options.RenderId,
 		BucketName: options.BucketName,
+		LogLevel:   logLevel,
 		Type:       "status",
 		Version:    VERSION,
 	}

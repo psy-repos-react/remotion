@@ -9,11 +9,13 @@ export const patchPackageJson = (
 		projectName,
 		latestRemotionVersion,
 		packageManager,
+		addTailwind,
 	}: {
 		projectRoot: string;
 		projectName: string;
 		latestRemotionVersion: string;
-		packageManager: `${PackageManager}@${string}` | null;
+		packageManager: PackageManager;
+		addTailwind: boolean;
 	},
 	{
 		getPackageJson = (filename: string) => fs.readFileSync(filename, 'utf-8'),
@@ -26,7 +28,7 @@ export const patchPackageJson = (
 	const contents = getPackageJson(fileName);
 	const packageJson = JSON.parse(contents);
 
-	const {name, dependencies, devDependencies, ...others} = packageJson;
+	const {name, dependencies, devDependencies, scripts, ...others} = packageJson;
 
 	const [newDependencies, newDevDependencies] = [
 		dependencies,
@@ -45,13 +47,36 @@ export const patchPackageJson = (
 			}, {});
 	});
 
+	const updateScripts = (scriptsToUpdate: Record<string, string>) => {
+		for (const [key, value] of Object.entries(scriptsToUpdate)) {
+			scriptsToUpdate[key] = value.replace(/remotion\b/g, 'remotionb');
+		}
+
+		return scriptsToUpdate;
+	};
+
+	// update scripts to use "remotionb" instead of "remotion" if Bun is used
+	// matching '@' as well to prevent conflicts with similarly named packages.
+	const newScripts = packageManager.startsWith('bun')
+		? updateScripts(scripts)
+		: scripts;
+
+	const newDependenciesWithTailwind = addTailwind
+		? {
+				...newDependencies,
+				'@remotion/tailwind-v4': latestRemotionVersion,
+				tailwindcss: '4.0.0',
+			}
+		: newDependencies;
+
 	const newPackageJson = JSON.stringify(
 		{
 			name: projectName,
 			...others,
-			dependencies: newDependencies,
+			dependencies: newDependenciesWithTailwind,
 			devDependencies: newDevDependencies,
-			...(packageManager ? {packageManager} : {}),
+			scripts: newScripts,
+			...(addTailwind ? {sideEffects: ['*.css']} : {}),
 		},
 		undefined,
 		2,

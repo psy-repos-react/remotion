@@ -1,5 +1,5 @@
 import {PlayerInternals} from '@remotion/player';
-import React, {useCallback, useEffect} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {Internals} from 'remotion';
 import {useIsStill} from '../helpers/is-current-selected-still';
 import {useKeybinding} from '../helpers/use-keybinding';
@@ -10,11 +10,7 @@ import {StepBack} from '../icons/step-back';
 import {StepForward} from '../icons/step-forward';
 import {useTimelineInOutFramePosition} from '../state/in-out';
 import {ControlButton} from './ControlButton';
-import {
-	getCurrentDuration,
-	getCurrentFps,
-	getCurrentFrame,
-} from './Timeline/imperative-state';
+import {getCurrentDuration, getCurrentFps} from './Timeline/imperative-state';
 import {ensureFrameIsInViewport} from './Timeline/timeline-scroll-logic';
 
 const backStyle = {
@@ -27,12 +23,20 @@ const forwardBackStyle = {
 	color: 'white',
 };
 
+const iconButton: React.CSSProperties = {
+	height: 14,
+	width: 14,
+	color: 'white',
+};
+
 export const PlayPause: React.FC<{
-	playbackRate: number;
-	loop: boolean;
-}> = ({playbackRate, loop}) => {
+	readonly playbackRate: number;
+	readonly loop: boolean;
+	readonly bufferStateDelayInMilliseconds: number;
+}> = ({playbackRate, loop, bufferStateDelayInMilliseconds}) => {
 	const {inFrame, outFrame} = useTimelineInOutFramePosition();
 	const videoConfig = Internals.useUnsafeVideoConfig();
+	const [showBufferIndicator, setShowBufferState] = useState<boolean>(false);
 
 	const {
 		playing,
@@ -44,7 +48,8 @@ export const PlayPause: React.FC<{
 		frameForward,
 		isLastFrame,
 		isFirstFrame,
-		remotionInternal_currentFrameRef,
+		emitter,
+		getCurrentFrame,
 	} = PlayerInternals.usePlayer();
 
 	PlayerInternals.usePlayback({
@@ -53,7 +58,10 @@ export const PlayPause: React.FC<{
 		moveToBeginningWhenEnded: true,
 		inFrame,
 		outFrame,
-		frameRef: remotionInternal_currentFrameRef,
+		getCurrentFrame,
+		browserMediaControlsBehavior: {
+			mode: 'register-media-session',
+		},
 	});
 
 	const isStill = useIsStill();
@@ -115,7 +123,7 @@ export const PlayPause: React.FC<{
 				});
 			}
 		},
-		[frameBack, seek],
+		[frameBack, seek, getCurrentFrame],
 	);
 
 	const onArrowRight = useCallback(
@@ -148,7 +156,7 @@ export const PlayPause: React.FC<{
 
 			e.preventDefault();
 		},
-		[frameForward, seek],
+		[frameForward, seek, getCurrentFrame],
 	);
 
 	const oneFrameBack = useCallback(() => {
@@ -243,6 +251,48 @@ export const PlayPause: React.FC<{
 		onSpace,
 	]);
 
+	useEffect(() => {
+		let timeout: Timer | null = null;
+		let stopped = false;
+
+		const onBuffer = () => {
+			requestAnimationFrame(() => {
+				stopped = false;
+				timeout = setTimeout(() => {
+					if (!stopped) {
+						setShowBufferState(true);
+					}
+				}, bufferStateDelayInMilliseconds);
+			});
+		};
+
+		const onResume = () => {
+			requestAnimationFrame(() => {
+				setShowBufferState(false);
+				stopped = true;
+				if (timeout) {
+					clearTimeout(timeout);
+				}
+			});
+		};
+
+		emitter.addEventListener('waiting', onBuffer);
+		emitter.addEventListener('resume', onResume);
+
+		return () => {
+			emitter.removeEventListener('waiting', onBuffer);
+			emitter.removeEventListener('resume', onResume);
+
+			setShowBufferState(false);
+
+			if (timeout) {
+				clearTimeout(timeout);
+			}
+
+			stopped = true;
+		};
+	}, [bufferStateDelayInMilliseconds, emitter]);
+
 	return (
 		<>
 			<ControlButton
@@ -269,21 +319,13 @@ export const PlayPause: React.FC<{
 				disabled={!videoConfig}
 			>
 				{playing ? (
-					<Pause
-						style={{
-							height: 14,
-							width: 14,
-							color: 'white',
-						}}
-					/>
+					showBufferIndicator ? (
+						<PlayerInternals.BufferingIndicator type="studio" />
+					) : (
+						<Pause style={iconButton} />
+					)
 				) : (
-					<Play
-						style={{
-							height: 14,
-							width: 14,
-							color: 'white',
-						}}
-					/>
+					<Play style={iconButton} />
 				)}
 			</ControlButton>
 

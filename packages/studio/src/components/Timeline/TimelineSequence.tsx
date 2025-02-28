@@ -3,8 +3,8 @@ import type {TSequence} from 'remotion';
 import {Internals, useCurrentFrame} from 'remotion';
 import {BLUE} from '../../helpers/colors';
 import {
-	getTimelineSequenceLayout,
 	SEQUENCE_BORDER_WIDTH,
+	getTimelineSequenceLayout,
 } from '../../helpers/get-timeline-sequence-layout';
 import {TIMELINE_LAYER_HEIGHT} from '../../helpers/timeline-layout';
 import {AudioWaveform} from '../AudioWaveform';
@@ -17,7 +17,7 @@ const AUDIO_GRADIENT = 'linear-gradient(rgb(16 171 58), rgb(43 165 63) 60%)';
 const VIDEO_GRADIENT = 'linear-gradient(to top, #8e44ad, #9b59b6)';
 
 export const TimelineSequence: React.FC<{
-	s: TSequence;
+	readonly s: TSequence;
 }> = ({s}) => {
 	const windowWidth = useContext(TimelineWidthContext);
 
@@ -29,8 +29,8 @@ export const TimelineSequence: React.FC<{
 };
 
 const Inner: React.FC<{
-	s: TSequence;
-	windowWidth: number;
+	readonly s: TSequence;
+	readonly windowWidth: number;
 }> = ({s, windowWidth}) => {
 	// If a duration is 1, it is essentially a still and it should have width 0
 	// Some compositions may not be longer than their media duration,
@@ -45,12 +45,17 @@ const Inner: React.FC<{
 
 	const frame = useCurrentFrame();
 	const relativeFrame = frame - s.from;
+	const relativeFrameWithPremount = relativeFrame + (s.premountDisplay ?? 0);
 
 	const roundedFrame = Math.round(relativeFrame * 100) / 100;
 
 	const isInRange = relativeFrame >= 0 && relativeFrame < s.duration;
+	const isPremounting =
+		relativeFrameWithPremount >= 0 &&
+		relativeFrameWithPremount < s.duration &&
+		!isInRange;
 
-	const {marginLeft, width} = useMemo(() => {
+	const {marginLeft, width, premountWidth} = useMemo(() => {
 		return getTimelineSequenceLayout({
 			durationInFrames: s.loopDisplay
 				? s.loopDisplay.durationInFrames * s.loopDisplay.numberOfTimes
@@ -60,6 +65,7 @@ const Inner: React.FC<{
 			maxMediaDuration,
 			video,
 			windowWidth,
+			premountDisplay: s.premountDisplay,
 		});
 	}, [maxMediaDuration, s, video, windowWidth]);
 
@@ -85,6 +91,23 @@ const Inner: React.FC<{
 
 	return (
 		<div key={s.id} style={style} title={s.displayName}>
+			{premountWidth ? (
+				<div
+					style={{
+						width: premountWidth,
+						height: '100%',
+						background: `repeating-linear-gradient(
+							-45deg,
+							transparent,
+							transparent 2px,
+							rgba(255, 255, 255, ${isPremounting ? 0.5 : 0.2}) 2px,
+							rgba(255, 255, 255, ${isPremounting ? 0.5 : 0.2}) 4px
+						)`,
+						position: 'absolute',
+					}}
+				/>
+			) : null}
+
 			{s.type === 'audio' ? (
 				<AudioWaveform
 					src={s.src}
@@ -101,19 +124,23 @@ const Inner: React.FC<{
 			{s.loopDisplay === undefined ? null : (
 				<LoopedTimelineIndicator loops={s.loopDisplay.numberOfTimes} />
 			)}
+
 			{s.type !== 'audio' &&
 			s.type !== 'video' &&
 			s.loopDisplay === undefined &&
-			isInRange ? (
+			(isInRange || isPremounting) ? (
 				<div
 					style={{
-						paddingLeft: 5,
+						paddingLeft: 5 + (premountWidth ?? 0),
 						height: '100%',
 						display: 'flex',
 						alignItems: 'center',
 					}}
 				>
-					<TimelineSequenceFrame roundedFrame={roundedFrame} />
+					<TimelineSequenceFrame
+						premounted={isPremounting}
+						roundedFrame={roundedFrame}
+					/>
 				</div>
 			) : null}
 		</div>

@@ -1,24 +1,23 @@
 {
+	"repository": {
+		"url": "https://github.com/remotion-dev/remotion/tree/main/packages/transitions"
+	},
 	"name": "@remotion/transitions",
-	"version": "4.0.104",
-	"description": "Transition presets for Remotion",
+	"version": "4.0.270",
+	"description": "Library for creating transitions in Remotion",
 	"sideEffects": false,
 	"main": "dist/esm/index.mjs",
 	"module": "dist/esm/index.js",
 	"types": "dist/index.d.ts",
 	"scripts": {
-		"test": "vitest --run",
-		"lint": "eslint src --ext ts,tsx",
+		"test": "bun test src",
+		"lint": "eslint src",
 		"formatting": "prettier src --check",
-		"watch": "tsc -w",
-		"build": "tsc -d && rollup --config rollup.config.js"
+		"make": "tsc -d && bun --env-file=../.env.bundle bundle.ts"
 	},
 	"author": "Jonny Burger",
 	"contributors": [],
 	"license": "UNLICENSED",
-	"repository": {
-		"url": "https://github.com/remotion-dev/remotion"
-	},
 	"bugs": {
 		"url": "https://github.com/remotion-dev/remotion/issues"
 	},
@@ -28,20 +27,14 @@
 		"@remotion/paths": "workspace:*"
 	},
 	"devDependencies": {
-		"@jonny/eslint-config": "3.0.276",
-		"eslint": "8.42.0",
-		"prettier": "3.1.1",
-		"prettier-plugin-organize-imports": "3.2.4",
+		"@happy-dom/global-registrator": "14.5.1",
 		"remotion": "workspace:*",
-		"react": "18.2.0",
-		"react-dom": "18.2.0",
-		"vitest": "0.31.1",
-		"@types/react": "18.2.48",
-		"@types/react-dom": "18.2.18",
+		"react": "19.0.0",
+		"react-dom": "19.0.0",
 		"@remotion/test-utils": "workspace:*",
-		"@vitejs/plugin-react": "^2.0.0",
-		"rollup": "^2.70.1",
-		"@rollup/plugin-typescript": "^8.2.0"
+		"@remotion/player": "workspace:*",
+		"@remotion/eslint-config-internal": "workspace:*",
+		"eslint": "9.19.0"
 	},
 	"peerDependencies": {
 		"react": ">=16.8.0",
@@ -56,40 +49,46 @@
 	},
 	"exports": {
 		".": {
+			"types": "./dist/index.d.ts",
 			"module": "./dist/esm/index.mjs",
 			"import": "./dist/esm/index.mjs",
-			"types": "./dist/index.d.ts",
 			"require": "./dist/index.js"
 		},
 		"./fade": {
+			"types": "./dist/presentations/fade.d.ts",
 			"module": "./dist/esm/fade.mjs",
 			"import": "./dist/esm/fade.mjs",
-			"require": "./dist/presentations/fade.js",
-			"types": "./dist/presentations/fade.d.ts"
+			"require": "./dist/presentations/fade.js"
 		},
 		"./slide": {
+			"types": "./dist/presentations/slide.d.ts",
 			"module": "./dist/esm/slide.mjs",
 			"import": "./dist/esm/slide.mjs",
-			"require": "./dist/presentations/slide.js",
-			"types": "./dist/presentations/slide.d.ts"
+			"require": "./dist/presentations/slide.js"
 		},
 		"./wipe": {
+			"types": "./dist/presentations/wipe.d.ts",
 			"module": "./dist/esm/wipe.mjs",
 			"import": "./dist/esm/wipe.mjs",
-			"require": "./dist/presentations/wipe.js",
-			"types": "./dist/presentations/wipe.d.ts"
+			"require": "./dist/presentations/wipe.js"
 		},
 		"./flip": {
+			"types": "./dist/presentations/flip.d.ts",
 			"module": "./dist/esm/flip.mjs",
 			"import": "./dist/esm/flip.mjs",
-			"require": "./dist/presentations/flip.js",
-			"types": "./dist/presentations/flip.d.ts"
+			"require": "./dist/presentations/flip.js"
 		},
 		"./clock-wipe": {
+			"types": "./dist/presentations/clock-wipe.d.ts",
 			"module": "./dist/esm/clock-wipe.mjs",
 			"import": "./dist/esm/clock-wipe.mjs",
-			"require": "./dist/presentations/clock-wipe.js",
-			"types": "./dist/presentations/clock-wipe.d.ts"
+			"require": "./dist/presentations/clock-wipe.js"
+		},
+		"./none": {
+			"types": "./dist/presentations/none.d.ts",
+			"module": "./dist/esm/none.mjs",
+			"import": "./dist/esm/none.mjs",
+			"require": "./dist/presentations/none.js"
 		},
 		"./package.json": "./package.json"
 	},
@@ -107,9 +106,13 @@
 			"fade": [
 				"dist/presentations/fade.d.ts"
 			],
+			"none": [
+				"dist/presentations/none.d.ts"
+			],
 			"clock-wipe": [
 				"dist/presentations/clock-wipe.d.ts"
 			]
 		}
-	}
+	},
+	"homepage": "https://www.remotion.dev/transitions"
 }

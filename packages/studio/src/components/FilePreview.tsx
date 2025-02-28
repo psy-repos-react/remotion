@@ -2,9 +2,9 @@ import {formatBytes} from '@remotion/studio-shared';
 import React from 'react';
 import type {AssetMetadata} from '../helpers/get-asset-metadata';
 import {JSONViewer} from './JSONViewer';
-import {Spacing} from './layout';
 import type {AssetFileType} from './Preview';
 import {TextViewer} from './TextViewer';
+import {Spacing} from './layout';
 
 const msgStyle: React.CSSProperties = {
 	fontSize: 13,
@@ -15,10 +15,10 @@ const msgStyle: React.CSSProperties = {
 };
 
 export const FilePreview: React.FC<{
-	src: string;
-	fileType: AssetFileType;
-	currentAsset: string;
-	assetMetadata: AssetMetadata | null;
+	readonly src: string;
+	readonly fileType: AssetFileType;
+	readonly currentAsset: string;
+	readonly assetMetadata: AssetMetadata | null;
 }> = ({fileType, src, currentAsset, assetMetadata}) => {
 	if (!assetMetadata) {
 		throw new Error('expected to have assetMetadata');

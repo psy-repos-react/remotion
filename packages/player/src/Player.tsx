@@ -10,16 +10,15 @@ import React, {
 } from 'react';
 import type {
 	CompProps,
+	LogLevel,
 	PlayableMediaTag,
 	SetTimelineContextValue,
 	TimelineContextValue,
 } from 'remotion';
 import {Composition, Internals} from 'remotion';
 import type {AnyZodObject} from 'zod';
-import {PlayerEventEmitterContext} from './emitter-context.js';
-import {PlayerEmitter} from './event-emitter.js';
-import {PLAYER_CSS_CLASSNAME} from './player-css-classname.js';
-import type {PlayerRef} from './player-methods.js';
+import {PlayerEmitterProvider} from './EmitterProvider.js';
+import type {RenderMuteButton} from './MediaVolumeSlider.js';
 import type {
 	RenderFullscreenButton,
 	RenderPlayPauseButton,
@@ -27,6 +26,11 @@ import type {
 import type {PosterFillMode, RenderLoading, RenderPoster} from './PlayerUI.js';
 import PlayerUI from './PlayerUI.js';
 import {PLAYER_COMP_ID, SharedPlayerContexts} from './SharedPlayerContext.js';
+import type {BrowserMediaControlsBehavior} from './browser-mediasession.js';
+import {playerCssClassname} from './player-css-classname.js';
+import type {PlayerRef} from './player-methods.js';
+import type {RenderVolumeSlider} from './render-volume-slider.js';
+import {acknowledgeRemotionLicenseMessage} from './use-remotion-license-acknowledge.js';
 import type {PropsIfHasProps} from './utils/props-if-has-props.js';
 import {validateInOutFrames} from './utils/validate-in-out-frame.js';
 import {validateInitialFrame} from './utils/validate-initial-frame.js';
@@ -40,43 +44,60 @@ import {
 
 export type ErrorFallback = (info: {error: Error}) => React.ReactNode;
 
-export type PlayerProps<Schema extends AnyZodObject, Props> = {
-	durationInFrames: number;
-	compositionWidth: number;
-	compositionHeight: number;
-	fps: number;
-	showVolumeControls?: boolean;
-	controls?: boolean;
-	errorFallback?: ErrorFallback;
-	style?: React.CSSProperties;
-	loop?: boolean;
-	autoPlay?: boolean;
-	allowFullscreen?: boolean;
-	clickToPlay?: boolean;
-	doubleClickToFullscreen?: boolean;
-	spaceKeyToPlayOrPause?: boolean;
-	numberOfSharedAudioTags?: number;
-	playbackRate?: number;
-	renderLoading?: RenderLoading;
-	moveToBeginningWhenEnded?: boolean;
-	className?: string;
-	initialFrame?: number;
-	renderPoster?: RenderPoster;
-	showPosterWhenPaused?: boolean;
-	showPosterWhenEnded?: boolean;
-	showPosterWhenUnplayed?: boolean;
-	inFrame?: number | null;
-	outFrame?: number | null;
-	initiallyShowControls?: number | boolean;
-	renderPlayPauseButton?: RenderPlayPauseButton;
-	renderFullscreenButton?: RenderFullscreenButton;
-	alwaysShowControls?: boolean;
-	schema?: Schema;
-	initiallyMuted?: boolean;
-	showPlaybackRateControl?: boolean | number[];
-	posterFillMode?: PosterFillMode;
+export type PlayerProps<
+	Schema extends AnyZodObject,
+	Props extends Record<string, unknown>,
+> = {
+	readonly durationInFrames: number;
+	readonly compositionWidth: number;
+	readonly compositionHeight: number;
+	readonly fps: number;
+	readonly showVolumeControls?: boolean;
+	readonly controls?: boolean;
+	readonly errorFallback?: ErrorFallback;
+	readonly style?: React.CSSProperties;
+	readonly loop?: boolean;
+	readonly autoPlay?: boolean;
+	readonly allowFullscreen?: boolean;
+	readonly clickToPlay?: boolean;
+	readonly doubleClickToFullscreen?: boolean;
+	readonly spaceKeyToPlayOrPause?: boolean;
+	readonly numberOfSharedAudioTags?: number;
+	readonly playbackRate?: number;
+	readonly renderLoading?: RenderLoading;
+	readonly moveToBeginningWhenEnded?: boolean;
+	readonly className?: string;
+	readonly initialFrame?: number;
+	readonly renderPoster?: RenderPoster;
+	readonly showPosterWhenPaused?: boolean;
+	readonly showPosterWhenEnded?: boolean;
+	readonly showPosterWhenUnplayed?: boolean;
+	readonly showPosterWhenBuffering?: boolean;
+	readonly inFrame?: number | null;
+	readonly outFrame?: number | null;
+	readonly initiallyShowControls?: number | boolean;
+	readonly renderPlayPauseButton?: RenderPlayPauseButton;
+	readonly renderFullscreenButton?: RenderFullscreenButton;
+	readonly renderMuteButton?: RenderMuteButton;
+	readonly renderVolumeSlider?: RenderVolumeSlider;
+	readonly alwaysShowControls?: boolean;
+	readonly schema?: Schema;
+	readonly initiallyMuted?: boolean;
+	readonly showPlaybackRateControl?: boolean | number[];
+	readonly posterFillMode?: PosterFillMode;
+	readonly bufferStateDelayInMilliseconds?: number;
+	readonly hideControlsWhenPointerDoesntMove?: boolean | number;
+	readonly overflowVisible?: boolean;
+	readonly browserMediaControlsBehavior?: BrowserMediaControlsBehavior;
+	readonly overrideInternalClassName?: string;
+	readonly logLevel?: LogLevel;
+	readonly noSuspense?: boolean;
+	readonly acknowledgeRemotionLicense?: boolean;
 } & CompProps<Props> &
 	PropsIfHasProps<Schema, Props>;
+
+export type PlayerPropsWithoutZod<Props extends Record<string, unknown>> =
+	PlayerProps<AnyZodObject, Props>;
 
 export const componentOrNullIfLazy = <Props,>(
 	props: CompProps<Props>,
@@ -88,7 +109,10 @@ export const componentOrNullIfLazy = <Props,>(
 	return null;
 };
 
-const PlayerFn = <Schema extends AnyZodObject, Props>(
+const PlayerFn = <
+	Schema extends AnyZodObject,
+	Props extends Record<string, unknown>,
+>(
 	{
 		durationInFrames,
 		compositionHeight,
@@ -113,6 +137,7 @@ const PlayerFn = <Schema extends AnyZodObject, Props>(
 		showPosterWhenUnplayed,
 		showPosterWhenEnded,
 		showPosterWhenPaused,
+		showPosterWhenBuffering,
 		initialFrame,
 		renderPoster,
 		inFrame,
@@ -120,10 +145,20 @@ const PlayerFn = <Schema extends AnyZodObject, Props>(
 		initiallyShowControls,
 		renderFullscreenButton,
 		renderPlayPauseButton,
+		renderVolumeSlider,
 		alwaysShowControls = false,
 		initiallyMuted = false,
 		showPlaybackRateControl = false,
 		posterFillMode = 'player-size',
+		bufferStateDelayInMilliseconds,
+		hideControlsWhenPointerDoesntMove = true,
+		overflowVisible = false,
+		renderMuteButton,
+		browserMediaControlsBehavior: passedBrowserMediaControlsBehavior,
+		overrideInternalClassName,
+		logLevel = 'info',
+		noSuspense,
+		acknowledgeRemotionLicense,
 		...componentProps
 	}: PlayerProps<Schema, Props>,
 	ref: MutableRefObject<PlayerRef>,
@@ -159,9 +194,18 @@ const PlayerFn = <Schema extends AnyZodObject, Props>(
 		);
 	}
 
-	const component = Internals.useLazyComponent(
-		componentProps,
-	) as LazyExoticComponent<ComponentType<unknown>>;
+	useState(() =>
+		acknowledgeRemotionLicenseMessage(
+			Boolean(acknowledgeRemotionLicense),
+			logLevel,
+		),
+	);
+
+	const component = Internals.useLazyComponent({
+		compProps: componentProps,
+		componentName: 'Player',
+		noSuspense: Boolean(noSuspense),
+	}) as LazyExoticComponent<ComponentType<unknown>>;
 
 	validateInitialFrame({initialFrame, durationInFrames});
 
@@ -170,7 +214,6 @@ const PlayerFn = <Schema extends AnyZodObject, Props>(
 	}));
 	const [playing, setPlaying] = useState<boolean>(false);
 	const [rootId] = useState<string>('player-comp');
-	const [emitter] = useState(() => new PlayerEmitter());
 	const rootRef = useRef<PlayerRef>(null);
 	const audioAndVideoTags = useRef<PlayableMediaTag[]>([]);
 	const imperativePlaying = useRef(false);
@@ -286,14 +329,21 @@ const PlayerFn = <Schema extends AnyZodObject, Props>(
 	validatePlaybackRate(currentPlaybackRate);
 
 	useEffect(() => {
-		emitter.dispatchRateChange(currentPlaybackRate);
-	}, [emitter, currentPlaybackRate]);
-
-	useEffect(() => {
 		setCurrentPlaybackRate(playbackRate);
 	}, [playbackRate]);
 
 	useImperativeHandle(ref, () => rootRef.current as PlayerRef, []);
+
+	useState(() => {
+		Internals.playbackLogging({
+			logLevel,
+			message: `[player] Mounting <Player>. User agent = ${
+				typeof navigator === 'undefined' ? 'server' : navigator.userAgent
+			}`,
+			tag: 'player',
+			mountTime: Date.now(),
+		});
+	});
 
 	const timelineContextValue = useMemo((): TimelineContextValue => {
 		return {
@@ -321,12 +371,24 @@ const PlayerFn = <Schema extends AnyZodObject, Props>(
 		useLayoutEffect(() => {
 			// Inject CSS only on client, and also only after the Player has hydrated
 			Internals.CSSUtils.injectCSS(
-				Internals.CSSUtils.makeDefaultCSS(`.${PLAYER_CSS_CLASSNAME}`, '#fff'),
+				Internals.CSSUtils.makeDefaultPreviewCSS(
+					`.${playerCssClassname(overrideInternalClassName)}`,
+					'#fff',
+				),
 			);
-		}, []);
+		}, [overrideInternalClassName]);
 	}
 
 	const actualInputProps = useMemo(() => inputProps ?? {}, [inputProps]);
+
+	const browserMediaControlsBehavior: BrowserMediaControlsBehavior =
+		useMemo(() => {
+			return (
+				passedBrowserMediaControlsBehavior ?? {
+					mode: 'prevent-media-session',
+				}
+			);
+		}, [passedBrowserMediaControlsBehavior]);
 
 	return (
 		<Internals.IsPlayerContextProvider>
@@ -339,11 +401,12 @@ const PlayerFn = <Schema extends AnyZodObject, Props>(
 				fps={fps}
 				numberOfSharedAudioTags={numberOfSharedAudioTags}
 				initiallyMuted={initiallyMuted}
+				logLevel={logLevel}
 			>
 				<Internals.Timeline.SetTimelineContext.Provider
 					value={setTimelineContextValue}
 				>
-					<PlayerEventEmitterContext.Provider value={emitter}>
+					<PlayerEmitterProvider currentPlaybackRate={currentPlaybackRate}>
 						<PlayerUI
 							ref={rootRef}
 							posterFillMode={posterFillMode}
@@ -369,16 +432,29 @@ const PlayerFn = <Schema extends AnyZodObject, Props>(
 							showPosterWhenUnplayed={Boolean(showPosterWhenUnplayed)}
 							showPosterWhenEnded={Boolean(showPosterWhenEnded)}
 							showPosterWhenPaused={Boolean(showPosterWhenPaused)}
+							showPosterWhenBuffering={Boolean(showPosterWhenBuffering)}
 							renderPoster={renderPoster}
 							inFrame={inFrame ?? null}
 							outFrame={outFrame ?? null}
 							initiallyShowControls={initiallyShowControls ?? true}
 							renderFullscreen={renderFullscreenButton ?? null}
 							renderPlayPauseButton={renderPlayPauseButton ?? null}
+							renderMuteButton={renderMuteButton ?? null}
+							renderVolumeSlider={renderVolumeSlider ?? null}
 							alwaysShowControls={alwaysShowControls}
 							showPlaybackRateControl={showPlaybackRateControl}
+							bufferStateDelayInMilliseconds={
+								bufferStateDelayInMilliseconds ?? 300
+							}
+							hideControlsWhenPointerDoesntMove={
+								hideControlsWhenPointerDoesntMove
+							}
+							overflowVisible={overflowVisible}
+							browserMediaControlsBehavior={browserMediaControlsBehavior}
+							overrideInternalClassName={overrideInternalClassName ?? undefined}
+							noSuspense={Boolean(noSuspense)}
 						/>
-					</PlayerEventEmitterContext.Provider>
+					</PlayerEmitterProvider>
 				</Internals.Timeline.SetTimelineContext.Provider>
 			</SharedPlayerContexts>
 		</Internals.IsPlayerContextProvider>
@@ -392,8 +468,8 @@ const forward = forwardRef as <T, P = {}>(
 	) => React.ReactElement | null,
 ) => (props: P & React.RefAttributes<T>) => React.ReactElement | null;
 
-/**
- * @description A component which can be rendered in a regular React App (for example: Vite, Next.js) to display a Remotion video.
+/*
+ * @description A component which can be rendered in a regular React App to display a Remotion video.
  * @see [Documentation](https://www.remotion.dev/docs/player/player)
  */
 export const Player = forward(PlayerFn);

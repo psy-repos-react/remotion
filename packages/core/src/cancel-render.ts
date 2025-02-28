@@ -1,4 +1,8 @@
 const isErrorLike = (err: unknown): boolean => {
+	if (err instanceof Error) {
+		return true;
+	}
+
 	if (err === null) {
 		return false;
 	}
@@ -30,15 +34,18 @@ const isErrorLike = (err: unknown): boolean => {
 	return true;
 };
 
-/**
- * @description When you invoke this function, Remotion will stop rendering all the frames without any retries
- * @see [Documentation](https://www.remotion.dev/docs/cancel-render)
+/*
+ * @description When you invoke this function, Remotion will stop rendering all the frames without any retries.
+ * @see [Documentation](https://remotion.dev/docs/cancel-render)
  */
 export function cancelRender(err: unknown): never {
 	let error: Error;
 
 	if (isErrorLike(err)) {
 		error = err as Error;
+		if (!error.stack) {
+			error.stack = new Error(error.message).stack;
+		}
 	} else if (typeof err === 'string') {
 		error = Error(err);
 	} else {

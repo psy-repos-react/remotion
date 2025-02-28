@@ -3,10 +3,13 @@ import {CanUseRemotionHooksProvider} from '../CanUseRemotionHooks.js';
 import type {CompositionManagerContext} from '../CompositionManagerContext.js';
 import {CompositionManager} from '../CompositionManagerContext.js';
 import {ResolveCompositionConfig} from '../ResolveCompositionConfig.js';
+import {BufferingProvider} from '../buffering.js';
+import type {LoggingContextValue} from '../log-level-context.js';
+import {LogLevelContext} from '../log-level-context.js';
 
 const Comp: React.FC = () => null;
 
-export const mockCompositionContext: CompositionManagerContext = {
+const mockCompositionContext: CompositionManagerContext = {
 	assets: [],
 	compositions: [
 		{
@@ -32,14 +35,23 @@ export const mockCompositionContext: CompositionManagerContext = {
 	canvasContent: {type: 'composition', compositionId: 'my-comp'},
 };
 
+const logContext: LoggingContextValue = {
+	logLevel: 'info',
+	mountTime: 0,
+};
+
 export const WrapSequenceContext: React.FC<{
-	children: React.ReactNode;
+	readonly children: React.ReactNode;
 }> = ({children}) => {
 	return (
-		<CanUseRemotionHooksProvider>
-			<CompositionManager.Provider value={mockCompositionContext}>
-				<ResolveCompositionConfig>{children}</ResolveCompositionConfig>
-			</CompositionManager.Provider>
-		</CanUseRemotionHooksProvider>
+		<LogLevelContext.Provider value={logContext}>
+			<BufferingProvider>
+				<CanUseRemotionHooksProvider>
+					<CompositionManager.Provider value={mockCompositionContext}>
+						<ResolveCompositionConfig>{children}</ResolveCompositionConfig>
+					</CompositionManager.Provider>
+				</CanUseRemotionHooksProvider>
+			</BufferingProvider>
+		</LogLevelContext.Provider>
 	);
 };

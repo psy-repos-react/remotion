@@ -1,11 +1,11 @@
 import {execSync} from 'child_process';
 
-execSync('pnpm run buildlambda', {
+execSync('bun run make', {
 	cwd: '../lambda',
 	stdio: 'inherit',
 });
 
-execSync('pnpm exec remotion lambda functions rmall -f', {
+execSync('bunx remotion lambda functions rmall -f', {
 	stdio: 'inherit',
 });
 
@@ -28,7 +28,7 @@ execSync(
 );
 
 execSync(
-	'pnpm exec remotion lambda still testbed-v6 huge-payload   --log=verbose',
+	'pnpm exec remotion lambda still testbed-v6 huge-payload --log=verbose',
 	{
 		stdio: 'inherit',
 	},

@@ -2,13 +2,13 @@ import type {ChangeEvent} from 'react';
 import React, {useCallback} from 'react';
 import {Checkbox} from '../Checkbox';
 import {Spacing} from '../layout';
-import {label, optionRow, rightRow} from './layout';
 import {OptionExplainerBubble} from './OptionExplainerBubble';
+import {label, optionRow, rightRow} from './layout';
 
 export const EnforceAudioTrackSetting: React.FC<{
-	enforceAudioTrack: boolean;
-	setEnforceAudioTrack: React.Dispatch<React.SetStateAction<boolean>>;
-	muted: boolean;
+	readonly enforceAudioTrack: boolean;
+	readonly setEnforceAudioTrack: React.Dispatch<React.SetStateAction<boolean>>;
+	readonly muted: boolean;
 }> = ({enforceAudioTrack, muted, setEnforceAudioTrack}) => {
 	const onEnforceAudioTrackChanged = useCallback(
 		(e: ChangeEvent<HTMLInputElement>) => {

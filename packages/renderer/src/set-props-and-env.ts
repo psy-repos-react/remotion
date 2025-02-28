@@ -1,11 +1,13 @@
 import {VERSION} from 'remotion/version';
 import type {Page} from './browser/BrowserPage';
 import {DEFAULT_TIMEOUT} from './browser/TimeoutSettings';
+import {gotoPageOrThrow} from './goto-page-or-throw';
 import type {LogLevel} from './log-level';
 import {Log} from './logger';
 import {normalizeServeUrl} from './normalize-serve-url';
 import {puppeteerEvaluateWithCatch} from './puppeteer-evaluate';
 import {redirectStatusCodes} from './redirect-status-codes';
+import {truthy} from './truthy';
 import {validatePuppeteerTimeout} from './validate-puppeteer-timeout';
 
 type SetPropsAndEnv = {
@@ -21,6 +23,7 @@ type SetPropsAndEnv = {
 	videoEnabled: boolean;
 	indent: boolean;
 	logLevel: LogLevel;
+	onServeUrlVisited: () => void;
 };
 
 const innerSetPropsAndEnv = async ({
@@ -36,6 +39,7 @@ const innerSetPropsAndEnv = async ({
 	videoEnabled,
 	indent,
 	logLevel,
+	onServeUrlVisited,
 }: SetPropsAndEnv): Promise<void> => {
 	validatePuppeteerTimeout(timeoutInMilliseconds);
 	const actualTimeout = timeoutInMilliseconds ?? DEFAULT_TIMEOUT;
@@ -46,11 +50,19 @@ const innerSetPropsAndEnv = async ({
 
 	await page.evaluateOnNewDocument((timeout: number) => {
 		window.remotion_puppeteerTimeout = timeout;
-	}, actualTimeout);
 
-	await page.evaluateOnNewDocument((input: string) => {
-		window.remotion_inputProps = input;
-	}, serializedInputPropsWithCustomSchema);
+		// To make getRemotionEnvironment() work
+		if (window.process === undefined) {
+			// @ts-expect-error
+			window.process = {};
+		}
+
+		if (window.process.env === undefined) {
+			window.process.env = {};
+		}
+
+		window.process.env.NODE_ENV = 'production';
+	}, actualTimeout);
 
 	if (envVariables) {
 		await page.evaluateOnNewDocument((input: string) => {
@@ -58,57 +70,57 @@ const innerSetPropsAndEnv = async ({
 		}, JSON.stringify(envVariables));
 	}
 
-	await page.evaluateOnNewDocument((key: number) => {
-		window.remotion_initialFrame = key;
-	}, initialFrame);
+	await page.evaluateOnNewDocument(
+		(
+			input: string,
+			key: number,
+			port: number,
+			audEnabled: boolean,
+			vidEnabled: boolean,
+			level: LogLevel,
+			// eslint-disable-next-line max-params
+		) => {
+			window.remotion_inputProps = input;
+			window.remotion_initialFrame = key;
+			window.remotion_attempt = 1;
+			window.remotion_proxyPort = port;
+			window.remotion_audioEnabled = audEnabled;
+			window.remotion_videoEnabled = vidEnabled;
+			window.remotion_logLevel = level;
 
-	await page.evaluateOnNewDocument((port: number) => {
-		window.remotion_proxyPort = port;
-	}, proxyPort);
+			window.alert = (message) => {
+				if (message) {
+					window.window.remotion_cancelledError = new Error(
+						`alert("${message}") was called. It cannot be called in a headless browser.`,
+					).stack;
+				} else {
+					window.window.remotion_cancelledError = new Error(
+						'alert() was called. It cannot be called in a headless browser.',
+					).stack;
+				}
+			};
 
-	await page.evaluateOnNewDocument((enabled: boolean) => {
-		window.remotion_audioEnabled = enabled;
-	}, audioEnabled);
+			window.confirm = (message) => {
+				if (message) {
+					window.remotion_cancelledError = new Error(
+						`confirm("${message}") was called. It cannot be called in a headless browser.`,
+					).stack;
+				} else {
+					window.remotion_cancelledError = new Error(
+						'confirm() was called. It cannot be called in a headless browser.',
+					).stack;
+				}
 
-	await page.evaluateOnNewDocument((enabled: boolean) => {
-		window.remotion_videoEnabled = enabled;
-	}, videoEnabled);
-
-	await page.evaluateOnNewDocument(() => {
-		window.alert = (message) => {
-			if (message) {
-				window.window.remotion_cancelledError = new Error(
-					`alert("${message}") was called. It cannot be called in a headless browser.`,
-				).stack;
-			} else {
-				window.window.remotion_cancelledError = new Error(
-					'alert() was called. It cannot be called in a headless browser.',
-				).stack;
-			}
-		};
-
-		window.confirm = (message) => {
-			if (message) {
-				window.remotion_cancelledError = new Error(
-					`confirm("${message}") was called. It cannot be called in a headless browser.`,
-				).stack;
-			} else {
-				window.remotion_cancelledError = new Error(
-					'confirm() was called. It cannot be called in a headless browser.',
-				).stack;
-			}
-
-			return false;
-		};
-	});
-
-	const pageRes = await page.goto({url: urlToVisit, timeout: actualTimeout});
-
-	if (pageRes === null) {
-		throw new Error(`Visited "${urlToVisit}" but got no response.`);
-	}
-
-	const status = pageRes.status();
+				return false;
+			};
+		},
+		serializedInputPropsWithCustomSchema,
+		initialFrame,
+		proxyPort,
+		audioEnabled,
+		videoEnabled,
+		logLevel,
+	);
 
 	const retry = async () => {
 		await new Promise<void>((resolve) => {
@@ -130,8 +142,28 @@ const innerSetPropsAndEnv = async ({
 			videoEnabled,
 			indent,
 			logLevel,
+			onServeUrlVisited,
 		});
 	};
+
+	const [pageRes, error] = await gotoPageOrThrow(
+		page,
+		urlToVisit,
+		actualTimeout,
+	);
+
+	if (error !== null) {
+		if (
+			error.message.includes('ECONNRESET') ||
+			error.message.includes('ERR_CONNECTION_TIMED_OUT')
+		) {
+			return retry();
+		}
+
+		throw error;
+	}
+
+	const status = pageRes.status();
 
 	// S3 in rare occasions returns a 500 or 503 error code for GET operations.
 	// Usually it is fixed by retrying.
@@ -144,6 +176,8 @@ const innerSetPropsAndEnv = async ({
 			`Error while getting compositions: Tried to go to ${urlToVisit} but the status code was ${status} instead of 200. Does the site you specified exist?`,
 		);
 	}
+
+	onServeUrlVisited();
 
 	const {value: isRemotionFn} = await puppeteerEvaluateWithCatch<
 		(typeof window)['getStaticCompositions']
@@ -208,7 +242,7 @@ const innerSetPropsAndEnv = async ({
 		timeoutInMilliseconds: actualTimeout,
 	});
 
-	const requiredVersion: typeof window.siteVersion = '10';
+	const requiredVersion: typeof window.siteVersion = '11';
 
 	if (siteVersion !== requiredVersion) {
 		throw new Error(
@@ -252,7 +286,7 @@ const innerSetPropsAndEnv = async ({
 };
 
 export const setPropsAndEnv = async (params: SetPropsAndEnv) => {
-	let timeout: NodeJS.Timeout | null = null;
+	let timeout: Timer | null = null;
 
 	try {
 		const result = await Promise.race([
@@ -261,7 +295,15 @@ export const setPropsAndEnv = async (params: SetPropsAndEnv) => {
 				timeout = setTimeout(() => {
 					reject(
 						new Error(
-							`Timed out after ${params.timeoutInMilliseconds} while setting up the headless browser. This could be because the you specified takes a long time to load (or network resources that it includes like fonts) or because the browser is not responding. Optimize the site or increase the browser timeout.`,
+							[
+								`Timed out after ${params.timeoutInMilliseconds} while setting up the headless browser.`,
+								'This could be because the you specified takes a long time to load (or network resources that it includes like fonts) or because the browser is not responding.',
+								process.platform === 'linux'
+									? 'Make sure you have installed the Linux depdendencies: https://www.remotion.dev/docs/miscellaneous/linux-dependencies'
+									: null,
+							]
+								.filter(truthy)
+								.join('\n'),
 						),
 					);
 				}, params.timeoutInMilliseconds);

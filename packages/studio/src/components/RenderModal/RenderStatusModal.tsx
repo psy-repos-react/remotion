@@ -2,13 +2,13 @@ import React, {useCallback, useContext} from 'react';
 import {makeRetryPayload} from '../../helpers/retry-payload';
 import {ModalsContext} from '../../state/modals';
 import {Button} from '../Button';
-import {Flex, SPACING_UNIT} from '../layout';
 import {HORIZONTAL_SCROLLBAR_CLASSNAME} from '../Menu/is-menu-item';
 import {ModalContainer} from '../ModalContainer';
-import {NewCompHeader} from '../ModalHeader';
-import {sendErrorNotification} from '../Notifications/NotificationCenter';
+import {ModalHeader} from '../ModalHeader';
+import {showNotification} from '../Notifications/NotificationCenter';
 import {cancelRenderJob, removeRenderJob} from '../RenderQueue/actions';
 import {RenderQueueContext} from '../RenderQueue/context';
+import {Flex, SPACING_UNIT} from '../layout';
 import {GuiRenderStatus} from './GuiRenderStatus';
 
 const container: React.CSSProperties = {
@@ -38,7 +38,9 @@ const buttonRow: React.CSSProperties = {
 	justifyContent: 'flex-end',
 };
 
-export const RenderStatusModal: React.FC<{jobId: string}> = ({jobId}) => {
+export const RenderStatusModal: React.FC<{readonly jobId: string}> = ({
+	jobId,
+}) => {
 	const {setSelectedModal} = useContext(ModalsContext);
 	const {jobs} = useContext(RenderQueueContext);
 	const job = jobs.find((j) => j.id === jobId);
@@ -58,13 +60,13 @@ export const RenderStatusModal: React.FC<{jobId: string}> = ({jobId}) => {
 	const onClickOnRemove = useCallback(() => {
 		setSelectedModal(null);
 		removeRenderJob(job).catch((err) => {
-			sendErrorNotification(`Could not remove job: ${err.message}`);
+			showNotification(`Could not remove job: ${err.message}`, 2000);
 		});
 	}, [job, setSelectedModal]);
 
 	const onClickOnCancel = useCallback(() => {
 		cancelRenderJob(job).catch((err) => {
-			sendErrorNotification(`Could not cancel job: ${err.message}`);
+			showNotification(`Could not cancel job: ${err.message}`, 2000);
 		});
 	}, [job]);
 
@@ -74,7 +76,7 @@ export const RenderStatusModal: React.FC<{jobId: string}> = ({jobId}) => {
 
 	return (
 		<ModalContainer onOutsideClick={onQuit} onEscape={onQuit}>
-			<NewCompHeader title={`Render ${job.compositionId}`} />
+			<ModalHeader title={`Render ${job.compositionId}`} />
 			<div style={container}>
 				{job.status === 'failed' ? (
 					<>

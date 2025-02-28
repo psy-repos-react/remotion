@@ -2,13 +2,13 @@
 image: /generated/articles-docs-studio-deploy-static.png
 title: Deploy Remotion Studio as static site
 sidebar_label: Deploy as static site
-crumb: "Remotion Studio"
+crumb: 'Remotion Studio'
 ---
 
 _available from v4.0.97_
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 You can deploy the Remotion Studio as a static site, for example to Vercel or Netlify.  
 While the Render button will be disabled, it may be used as a [Serve URL](/docs/terminology/serve-url) to pass to rendering APIs.  
@@ -29,11 +29,13 @@ We recommend to add `build` to your `.gitignore` file. The command will offer to
 
 To deploy to Vercel, connect your repository to Vercel.
 
-In the "Build and Output" settings, set the following:
+In the "Build and Output" settings, enable "OVERRIDE" and set the following:
 
 - **Build Command**: `bunx remotion bundle`
 - **Output Directory**: `build`
 - **Installation Command**: _Leave default_
+
+![Alt text](https://github.com/remotion-dev/remotion/assets/86873911/ac38e1fb-0c95-4f64-b2b9-b72b90d69f22)
 
 :::note
 Using bunx as a script runner is slightly faster than using `npx`.
@@ -47,6 +49,46 @@ Connect your repository to Netlify.
 - **Build command**: `npx remotion bundle`
 - **Publish directory**: `build`
 - **Functions directory**: _Leave default_
+
+## Deploy to GitHub Pages
+
+<Step>1</Step> Create the following file in your repo:
+
+```yaml title=".github/workflows/deploy-studio.yml"
+name: Deploy Remotion studio
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'main'
+permissions:
+  contents: write
+jobs:
+  render:
+    name: Render video
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@main
+      - name: install packages
+        run: npm i
+      - name: Bundle Studio
+        run: npx remotion bundle --public-path="./"
+      - name: Deploy Studio
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: build
+```
+
+The above code will deploy the bundled Remotion Studio to a branch `gh-pages`.
+
+:::note
+The --public-path flag for `npx remotion bundle` is available only from remotion version `4.0.127`
+:::
+
+<Step>3</Step> Go to the settings of your repository (github.com/[username]/[repo]/settings/pages) <br />
+
+<Step>4</Step> In the Branch section, select the <code>gh-pages</code> branch and click save.
 
 ## Rendering from a URL
 
@@ -79,29 +121,27 @@ npx remotion render https://remotion-helloworld.vercel.app HelloWorld --props '{
 <TabItem value="ssr">
 
 ```tsx twoslash title="render.mjs"
-// @module: esnext
-// @target: es2017
-const outputLocation = "/path/to/frames";
+const outputLocation = '/path/to/frames';
 
-import { renderMedia, selectComposition } from "@remotion/renderer";
+import {renderMedia, selectComposition} from '@remotion/renderer';
 
 // ---cut---
 const inputProps = {
-  titleText: "Hello World",
+  titleText: 'Hello World',
 };
 
-const serveUrl = "https://remotion-helloworld.vercel.app";
+const serveUrl = 'https://remotion-helloworld.vercel.app';
 
 const composition = await selectComposition({
   serveUrl,
-  id: "HelloWorld",
+  id: 'HelloWorld',
   inputProps,
 });
 
 await renderMedia({
   composition,
   serveUrl,
-  codec: "h264",
+  codec: 'h264',
   inputProps,
 });
 ```
@@ -117,19 +157,17 @@ npx remotion lambda render https://remotion-helloworld.vercel.app HelloWorld --p
 ```
 
 ```tsx twoslash title="Node.js/Bun"
-// @module: esnext
-// @target: es2017
 // ---cut---
-import { renderMediaOnLambda } from "@remotion/lambda/client";
+import {renderMediaOnLambda} from '@remotion/lambda/client';
 
-const { bucketName, renderId } = await renderMediaOnLambda({
-  region: "us-east-1",
-  functionName: "remotion-render-bds9aab",
-  composition: "HelloWorld",
-  serveUrl: "https://remotion-helloworld.vercel.app",
-  codec: "h264",
+const {bucketName, renderId} = await renderMediaOnLambda({
+  region: 'us-east-1',
+  functionName: 'remotion-render-bds9aab',
+  composition: 'HelloWorld',
+  serveUrl: 'https://remotion-helloworld.vercel.app',
+  codec: 'h264',
   inputProps: {
-    titleText: "Hello World",
+    titleText: 'Hello World',
   },
 });
 ```
@@ -145,23 +183,21 @@ npx remotion cloudrun render https://remotion-helloworld.vercel.app HelloWorld -
 ```
 
 ```tsx twoslash title="Node.js/Bun"
-// @module: esnext
-// @target: es2017
 // ---cut---
-import { renderMediaOnCloudrun } from "@remotion/cloudrun";
+import {renderMediaOnCloudrun} from '@remotion/cloudrun/client';
 
 const result = await renderMediaOnCloudrun({
-  region: "us-east1",
-  serviceName: "remotion-render-bds9aab",
-  composition: "HelloWorld",
-  serveUrl: "https://remotion-helloworld.vercel.app",
-  codec: "h264",
+  region: 'us-east1',
+  serviceName: 'remotion-render-bds9aab',
+  composition: 'HelloWorld',
+  serveUrl: 'https://remotion-helloworld.vercel.app',
+  codec: 'h264',
   inputProps: {
-    titleText: "Hello World",
+    titleText: 'Hello World!',
   },
 });
 
-if (result.type === "success") {
+if (result.type === 'success') {
   console.log(result.bucketName);
   console.log(result.renderId);
 }

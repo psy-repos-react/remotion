@@ -22,19 +22,29 @@ type TNotification = {
 	id: string;
 	content: React.ReactNode;
 	created: number;
-	duration: number;
+	duration: number | null;
+};
+
+type CreatedNotification = {
+	replaceContent: (
+		newContent: React.ReactNode,
+		durationInMs: number | null,
+	) => void;
 };
 
 type TNotificationCenter = {
-	addNotification: (notification: TNotification) => void;
+	addNotification: (notification: TNotification) => CreatedNotification;
 };
 
-export const notificationCenter = createRef<TNotificationCenter>();
+const notificationCenter = createRef<TNotificationCenter>();
 
-export const sendErrorNotification = (content: React.ReactNode) => {
-	notificationCenter.current?.addNotification({
+export const showNotification = (
+	content: React.ReactNode,
+	durationInMs: number | null,
+) => {
+	return (notificationCenter.current as TNotificationCenter).addNotification({
 		content,
-		duration: 2000,
+		duration: durationInMs,
 		created: Date.now(),
 		id: String(Math.random()).replace('0.', ''),
 	});
@@ -49,21 +59,42 @@ export const NotificationCenter: React.FC = () => {
 		});
 	}, []);
 
-	const addNotification = useCallback((notification: TNotification) => {
-		setNotifications((previousNotifications) => {
-			return [...previousNotifications, notification];
-		});
-	}, []);
+	const addNotification = useCallback(
+		(notification: TNotification): CreatedNotification => {
+			setNotifications((previousNotifications) => {
+				return [...previousNotifications, notification];
+			});
 
-	useImperativeHandle(
-		notificationCenter,
-		() => {
 			return {
-				addNotification,
+				replaceContent: (
+					newContent: React.ReactNode,
+					durationInMs: number | null,
+				) => {
+					setNotifications((oldNotifications) => {
+						return oldNotifications.map((notificationToMap) => {
+							if (notificationToMap.id === notification.id) {
+								return {
+									...notificationToMap,
+									duration: durationInMs,
+									content: newContent,
+									created: Date.now(),
+								};
+							}
+
+							return notificationToMap;
+						});
+					});
+				},
 			};
 		},
-		[addNotification],
+		[],
 	);
+
+	useImperativeHandle(notificationCenter, () => {
+		return {
+			addNotification,
+		};
+	}, [addNotification]);
 
 	return (
 		<div style={container}>

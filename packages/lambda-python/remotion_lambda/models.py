@@ -35,6 +35,7 @@ class Privacy(str, Enum):
     """
     PUBLIC: str = 'public'
     PRIVATE: str = 'private'
+    NO_ACL: str = 'no-acl'
 
 
 class LogLevel(str, Enum):
@@ -107,14 +108,27 @@ class CustomCredentialsWithoutSensitiveData:
 @dataclass
 class CustomCredentials(CustomCredentialsWithoutSensitiveData):
     """
-    Represents custom credentials, extending credentials without sensitive data.
+        Represents custom credentials, extending credentials without sensitive data.
 
-    Attributes:
-        access_key_id (Optional[str]): The access key ID.
-        secret_access_key (Optional[str]): The secret access key.
-    """
+        Attributes:
+            access_key_id (Optional[str]): The access key ID.
+            secret_access_key (Optional[str]): The secret access key.
+        """
     access_key_id: Optional[str] = None
     secret_access_key: Optional[str] = None
+    region: Optional[str] = None
+
+    def serialize_params(self) -> Dict:
+        """
+        Serializes the credentials to a dictionary.
+        """
+        parameters = {
+            'accessKeyId': self.access_key_id,
+            'secretAccessKey': self.secret_access_key,
+            'region': self.region,
+            'endpoint': self.endpoint,
+        }
+        return parameters
 
 
 @dataclass
@@ -123,12 +137,12 @@ class OutNameInputObject:
     Defines output naming and storage options.
 
     Attributes:
-        bucket_name (str): The name of the S3 bucket for output storage.
+        bucketName (str): The name of the S3 bucket for output storage.
         key (str): The key name within the S3 bucket.
         s3_output_provider (Optional[CustomCredentials]):
              Optional custom credentials for the S3 output provider.
     """
-    bucket_name: str
+    bucketName: str
     key: str
     s3_output_provider: Optional[CustomCredentials] = None
 
@@ -181,6 +195,9 @@ class RenderProgressParams:
     bucket_name: str
     function_name: str
     region: str
+    log_level: str
+    force_path_style: Optional[bool] = None
+    s3_output_provider: Optional[CustomCredentials] = None
 
     def serialize_params(self) -> Dict:
         """
@@ -191,8 +208,18 @@ class RenderProgressParams:
             'bucketName': self.bucket_name,
             'type': 'status',
             "version": VERSION,
-            "s3OutputProvider": None,
+            "logLevel": self.log_level,
+            "s3OutputProvider": self.s3_output_provider,
         }
+        if self.force_path_style is not None:
+            parameters['forcePathStyle'] = self.force_path_style
+        else:
+            parameters['forcePathStyle'] = False
+
+        if self.s3_output_provider is not None:
+            parameters['s3OutputProvider'] = self.s3_output_provider.serialize_params()
+        else:
+            parameters['s3OutputProvider'] = None
         return parameters
 
 
@@ -249,7 +276,8 @@ class RenderMediaParams:
     input_props: Optional[List] = None
     bucket_name: Optional[str] = None
     region: Optional[str] = None
-    out_name: Optional[str] = None
+    out_name: Optional[Union[str, OutNameInputObject]] = None
+    prefer_lossless: Optional[bool] = False
     composition: str = ""
     serve_url: str = ""
     frames_per_lambda: Optional[int] = None
@@ -259,10 +287,11 @@ class RenderMediaParams:
     image_format: ValidStillImageFormats = ValidStillImageFormats.JPEG
     crf: Optional[int] = None
     env_variables: Optional[Dict] = None
+    metadata: Optional[Dict] = None
     max_retries: int = 1
     jpeg_quality: int = 80
     privacy: Privacy = Privacy.PUBLIC
-    color_space: str = 'default'
+    color_space: Optional[str] = None
     log_level: Optional[LogLevel] = LogLevel.INFO
     frame_range: Optional[str] = None
     timeout_in_milliseconds: Optional[int] = 30000
@@ -275,12 +304,15 @@ class RenderMediaParams:
         default_factory=lambda: {'type': 'play-in-browser'})
     muted: bool = False
     overwrite: bool = False
+    force_path_style: Optional[bool] = None
     audio_bitrate: Optional[int] = None
     video_bitrate: Optional[int] = None
     webhook: Optional[Webhook] = None
     force_height: Optional[int] = None
     offthreadvideo_cache_size_in_bytes: Optional[int] = None
+    offthreadvideo_threads: Optional[int] = None
     force_width: Optional[int] = None
+    api_key: Optional[str] = None
     audio_codec: Optional[str] = None
     renderer_function_name: Optional[str] = None
     pro_res_profile: Optional[str] = None
@@ -305,11 +337,13 @@ class RenderMediaParams:
             'maxRetries': self.max_retries,
             'jpegQuality': self.jpeg_quality,
             'envVariables': self.env_variables,
+            'metadata': self.metadata,
             'privacy': self.privacy,
             'colorSpace': self.color_space,
             'logLevel': self.log_level,
             'frameRange': self.frame_range,
             'outName': self.out_name,
+            'preferLossless': self.prefer_lossless,
             'timeoutInMilliseconds': self.timeout_in_milliseconds,
             'chromiumOptions': self.chromium_options if self.chromium_options is not None else {},
             'scale': self.scale,
@@ -325,7 +359,9 @@ class RenderMediaParams:
             'webhook': self.webhook,
             'forceHeight': self.force_height,
             'offthreadVideoCacheSizeInBytes': self.offthreadvideo_cache_size_in_bytes,
+            'offthreadVideoThreads': self.offthreadvideo_threads,
             'forceWidth': self.force_width,
+            'apiKey': self.api_key,
             'bucketName': self.bucket_name,
             'audioCodec': self.audio_codec,
             'x264Preset': self.x264_preset,
@@ -337,19 +373,32 @@ class RenderMediaParams:
 
         if self.crf is not None:
             parameters['crf'] = self.crf
+        else:
+            parameters['crf'] = None
 
         if self.env_variables is None:
             parameters['envVariables'] = {}
 
+        if self.metadata is None:
+            parameters['metadata'] = {}
+
         if self.pixel_format is not None:
             parameters['pixelFormat'] = self.pixel_format
+        else:
+            parameters['pixelFormat'] = None
 
         if self.pro_res_profile is not None:
             parameters['proResProfile'] = self.pro_res_profile
+        else:
+            parameters['proResProfile'] = None
 
         if self.x264_preset is not None:
             parameters['x264Preset'] = self.x264_preset
 
+        if self.force_path_style is not None:
+            parameters['forcePathStyle'] = self.force_path_style
+        else:
+            parameters['forcePathStyle'] = False
         return parameters
 
 
@@ -377,11 +426,15 @@ class RenderStillParams:
     download_behavior: Dict = field(default_factory=lambda: {
                                     'type': 'play-in-browser'})
     force_width: Optional[int] = None
+    api_key: Optional[int] = None
     force_height: Optional[int] = None
     force_bucket_name: Optional[str] = None
     dump_browser_logs: Optional[bool] = None
     delete_after: Optional[DeleteAfter] = None
+    force_path_style: Optional[bool] = None
     offthreadvideo_cache_size_in_bytes: Optional[int] = None
+    offthreadvideo_threads: Optional[int] = None
+    streamed: bool = False
 
     def serialize_params(self) -> Dict:
         """
@@ -420,12 +473,20 @@ class RenderStillParams:
             'scale': self.scale,
             'downloadBehavior': self.download_behavior or {'type': 'play-in-browser'},
             'forceWidth': self.force_width,
+            'apiKey': self.api_key,
             'forceHeight': self.force_height,
             'forceBucketName': self.force_bucket_name,
             'deleteAfter': self.delete_after,
             'attempt': self.attempt,
-            'offthreadVideoCacheSizeInBytes': self.offthreadvideo_cache_size_in_bytes
+            'offthreadVideoCacheSizeInBytes': self.offthreadvideo_cache_size_in_bytes,
+            'offthreadVideoThreads': self.offthreadvideo_threads,
+            'streamed': self.streamed,
         }
+
+        if self.force_path_style is not None:
+            parameters['forcePathStyle'] = self.force_path_style
+        else:
+            parameters['forcePathStyle'] = False
 
         return parameters
 
@@ -449,7 +510,7 @@ class RenderStillResponse:
     size_in_bytes: int
     bucket_name: str
     render_id: str
-    cloud_watch_logs: Optional[str] = None
+    outKey: str
 
 
 class RenderMediaProgress:

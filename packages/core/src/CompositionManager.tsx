@@ -7,7 +7,6 @@ import React, {
 	useState,
 } from 'react';
 import type {AnyZodObject} from 'zod';
-import {SharedAudioContextProvider} from './audio/shared-audio-tags.js';
 import type {CalculateMetadataFunction} from './Composition.js';
 import type {
 	BaseMetadata,
@@ -16,10 +15,11 @@ import type {
 } from './CompositionManagerContext.js';
 import {CompositionManager} from './CompositionManagerContext.js';
 import type {TFolder} from './Folder.js';
-import type {InferProps, PropsIfHasProps} from './props-if-has-props.js';
 import {RenderAssetManagerProvider} from './RenderAssetManager.js';
 import {ResolveCompositionConfig} from './ResolveCompositionConfig.js';
 import {SequenceManagerProvider} from './SequenceManager.js';
+import {SharedAudioContextProvider} from './audio/shared-audio-tags.js';
+import type {InferProps, PropsIfHasProps} from './props-if-has-props.js';
 
 export type TComposition<
 	Schema extends AnyZodObject,
@@ -123,9 +123,10 @@ export type TSequence = {
 	nonce: number;
 	loopDisplay: LoopDisplay | undefined;
 	stack: string | null;
+	premountDisplay: number | null;
 } & EnhancedTSequenceData;
 
-export type TRenderAsset = {
+export type AudioOrVideoAsset = {
 	type: 'audio' | 'video';
 	src: string;
 	id: string;
@@ -135,21 +136,29 @@ export type TRenderAsset = {
 	playbackRate: number;
 	allowAmplificationDuringRender: boolean;
 	toneFrequency: number | null;
+	audioStartFrame: number;
 };
 
+export type ArtifactAsset = {
+	type: 'artifact';
+	id: string;
+	filename: string;
+	content: string | Uint8Array;
+	frame: number;
+	binary: boolean;
+};
+
+export type TRenderAsset = AudioOrVideoAsset | ArtifactAsset;
+
 export const compositionsRef = React.createRef<{
-	getCompositions: () => TCompMetadataWithCalcFunction<
-		AnyZodObject,
-		Record<string, unknown>
-	>[];
+	getCompositions: () => AnyComposition[];
 }>();
 
 export const CompositionManagerProvider: React.FC<{
-	children: React.ReactNode;
-	numberOfAudioTags: number;
+	readonly children: React.ReactNode;
+	readonly numberOfAudioTags: number;
 }> = ({children, numberOfAudioTags}) => {
 	// Wontfix, expected to have
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const [compositions, setCompositions] = useState<AnyComposition[]>([]);
 	const currentcompositionsRef = useRef<AnyComposition[]>(compositions);
 	const [folders, setFolders] = useState<TFolder[]>([]);
@@ -160,10 +169,7 @@ export const CompositionManagerProvider: React.FC<{
 		useState<BaseMetadata | null>(null);
 
 	const updateCompositions = useCallback(
-		(
-			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			updateComps: (comp: AnyComposition[]) => AnyComposition[],
-		) => {
+		(updateComps: (comp: AnyComposition[]) => AnyComposition[]) => {
 			setCompositions((comps) => {
 				const updated = updateComps(comps);
 				currentcompositionsRef.current = updated;
@@ -186,7 +192,7 @@ export const CompositionManagerProvider: React.FC<{
 
 				const value = [...comps, comp]
 					.slice()
-					// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 					.sort((a, b) => a.nonce - b.nonce) as AnyComposition[];
 				return value;
 			});
@@ -223,20 +229,36 @@ export const CompositionManagerProvider: React.FC<{
 		[],
 	);
 
-	useImperativeHandle(
-		compositionsRef,
-		() => {
-			return {
-				getCompositions: () => currentcompositionsRef.current,
-			};
-		},
-		[],
-	);
+	useImperativeHandle(compositionsRef, () => {
+		return {
+			getCompositions: () => currentcompositionsRef.current,
+		};
+	}, []);
 
 	const composition = compositions.find((c) =>
 		canvasContent?.type === 'composition'
 			? c.id === canvasContent.compositionId
 			: null,
+	);
+
+	const updateCompositionDefaultProps = useCallback(
+		(id: string, newDefaultProps: Record<string, unknown>) => {
+			setCompositions((comps) => {
+				const updated = comps.map((c) => {
+					if (c.id === id) {
+						return {
+							...c,
+							defaultProps: newDefaultProps,
+						};
+					}
+
+					return c;
+				});
+
+				return updated;
+			});
+		},
+		[],
 	);
 
 	const contextValue = useMemo((): CompositionManagerContext => {
@@ -251,6 +273,7 @@ export const CompositionManagerProvider: React.FC<{
 			setCurrentCompositionMetadata,
 			canvasContent,
 			setCanvasContent,
+			updateCompositionDefaultProps,
 		};
 	}, [
 		compositions,
@@ -261,7 +284,7 @@ export const CompositionManagerProvider: React.FC<{
 		unregisterFolder,
 		currentCompositionMetadata,
 		canvasContent,
-		setCanvasContent,
+		updateCompositionDefaultProps,
 	]);
 
 	return (

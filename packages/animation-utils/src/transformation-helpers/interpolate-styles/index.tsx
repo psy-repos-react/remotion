@@ -1,4 +1,4 @@
-import type {InterpolateOptions} from 'remotion';
+import type {ExtrapolateType, InterpolateOptions} from 'remotion';
 import {interpolate, interpolateColors} from 'remotion';
 import type {
 	CSSPropertiesKey,
@@ -7,8 +7,6 @@ import type {
 	UnitNumberAndFunction,
 } from '../../type';
 import {breakDownValueIntoUnitNumberAndFunctions} from './utils';
-
-type ExtrapolateType = 'extend' | 'identity' | 'clamp';
 
 const interpolatedPropertyPart = ({
 	inputValue,
@@ -186,7 +184,8 @@ const interpolateStylesFunction = ({
 }): Style => {
 	const [startingValue, endingValue] = inputRange;
 	return Object.keys(initialStyle).reduce((acc, key) => {
-		if (!finalStyle[key as CSSPropertiesKey]) {
+		const value = finalStyle[key as CSSPropertiesKey];
+		if (value === undefined || value === null) {
 			return {
 				...acc,
 				[key]: initialStyle[key as CSSPropertiesKey],
@@ -256,9 +255,9 @@ function checkStylesRange(arr: readonly Style[]) {
 	}
 }
 
-/**
+/*
  * @description A function that interpolates between two styles based on an input range.
- * @see [Documentation](https://www.remotion.dev/docs/animation-utils/interpolate-styles)
+ * @see [Documentation](https://remotion.dev/docs/animation-utils/interpolate-styles)
  */
 export const interpolateStyles = (
 	input: number,
@@ -292,6 +291,10 @@ export const interpolateStyles = (
 	checkStylesRange(outputStylesRange);
 
 	let startIndex = inputRange.findIndex((step) => input < step) - 1;
+	if (startIndex === -1) {
+		startIndex = 0;
+	}
+
 	if (startIndex === -2) {
 		startIndex = inputRange.length - 2;
 	}

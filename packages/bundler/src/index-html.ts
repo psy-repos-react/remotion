@@ -1,10 +1,13 @@
-import type {GitSource, RenderDefaults} from '@remotion/studio';
-import path from 'node:path';
-import type {StaticFile} from 'remotion';
-import {Internals} from 'remotion';
+import type {
+	GitSource,
+	PackageManager,
+	RenderDefaults,
+} from '@remotion/studio-shared';
+import type {LogLevel, StaticFile} from 'remotion';
+import {Internals, VERSION} from 'remotion';
 
 export const indexHtml = ({
-	baseDir,
+	publicPath,
 	editorName,
 	inputProps,
 	envVariables,
@@ -19,9 +22,14 @@ export const indexHtml = ({
 	renderDefaults,
 	publicFolderExists,
 	gitSource,
+	projectName,
+	installedDependencies,
+	packageManager,
+	logLevel,
+	mode,
 }: {
 	staticHash: string;
-	baseDir: string;
+	publicPath: string;
 	editorName: string | null;
 	inputProps: object | null;
 	envVariables?: Record<string, string>;
@@ -35,6 +43,11 @@ export const indexHtml = ({
 	title: string;
 	renderDefaults: RenderDefaults | undefined;
 	gitSource: GitSource | null;
+	projectName: string;
+	installedDependencies: string[] | null;
+	packageManager: PackageManager | 'unknown';
+	logLevel: LogLevel;
+	mode: 'dev' | 'bundle';
 }) =>
 	// Must setup remotion_editorName and remotion.remotion_projectName before bundle.js is loaded
 	`
@@ -43,25 +56,24 @@ export const indexHtml = ({
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<link rel="preconnect" href="https://fonts.gstatic.com" />
 		${
 			includeFavicon
-				? `<link id="__remotion_favicon" rel="icon" type="image/png" href="/remotion.png" />`
+				? `<link id="__remotion_favicon" rel="icon" type="image/png" href="${publicPath}favicon.ico" />`
 				: ''
 		}
 		<title>${title}</title>
 	</head>
 	<body>
 		<script>window.remotion_numberOfAudioTags = ${numberOfAudioTags};</script>
+		${mode === 'dev' ? `<script>window.remotion_logLevel = "${logLevel}";</script>` : ''}
 		<script>window.remotion_staticBase = "${staticHash}";</script>
 		${
 			editorName
 				? `<script>window.remotion_editorName = "${editorName}";</script>`
 				: '<script>window.remotion_editorName = null;</script>'
 		}
-		<script>window.remotion_projectName = ${JSON.stringify(
-			path.basename(remotionRoot),
-		)};</script>
+		<script>window.remotion_projectName = ${JSON.stringify(projectName)};</script>
+		<script>window.remotion_publicPath = ${JSON.stringify(publicPath)};</script>
 		<script>window.remotion_renderDefaults = ${JSON.stringify(
 			renderDefaults,
 		)};</script>
@@ -98,9 +110,15 @@ export const indexHtml = ({
 				: ''
 		}
 		<script>window.remotion_staticFiles = ${JSON.stringify(publicFiles)}</script>
+		<script>window.remotion_installedPackages = ${JSON.stringify(installedDependencies)}</script>
+		<script>window.remotion_packageManager = ${JSON.stringify(packageManager)}</script>
 		<script>window.remotion_publicFolderExists = ${
 			publicFolderExists ? `"${publicFolderExists}"` : 'null'
 		};</script>
+		<script>
+				window.siteVersion = '11';
+				window.remotion_version = '${VERSION}';
+		</script>
 		
 		<div id="video-container"></div>
 		<div id="${Internals.REMOTION_STUDIO_CONTAINER_ELEMENT}"></div>
@@ -112,7 +130,7 @@ export const indexHtml = ({
 		<div id="menuportal-5"></div>
 		<div id="remotion-error-overlay"></div>
 		<div id="server-disconnected-overlay"></div>
-		<script src="${baseDir}bundle.js"></script>
+		<script src="${publicPath}bundle.js"></script>
 	</body>
 </html>
 `.trim();

@@ -7,6 +7,7 @@ import {VERSION} from 'remotion/version';
 import {Log} from '../cli/log';
 import {randomHash} from '../shared/random-hash';
 import {getCompositionFromBody} from './helpers/get-composition-from-body';
+import {getDownloadBehaviorSetting} from './helpers/get-download-behavior-setting';
 import type {
 	CloudRunPayloadType,
 	RenderStillOnCloudrunOutput,
@@ -33,7 +34,7 @@ export const renderStillSingleThread = async (
 		);
 	}
 
-	const renderId = randomHash({randomInTests: true});
+	const renderId = body.renderIdOverride ?? randomHash({randomInTests: true});
 
 	try {
 		Log.verbose(
@@ -93,8 +94,17 @@ export const renderStillSingleThread = async (
 			puppeteerInstance: null,
 			server: undefined,
 			offthreadVideoCacheSizeInBytes: body.offthreadVideoCacheSizeInBytes,
+			offthreadVideoThreads: body.offthreadVideoThreads,
+			binariesDirectory: null,
+			onBrowserDownload: () => {
+				throw new Error('Should not download a browser in Cloud Run');
+			},
+			onArtifact: () => {
+				throw new Error('Emitting artifacts is not supported in Cloud Run');
+			},
+			chromeMode: 'headless-shell',
 		});
-		Log.info('Still rendered');
+		Log.info({indent: false, logLevel: body.logLevel}, 'Still rendered');
 
 		const storage = new Storage();
 
@@ -105,23 +115,28 @@ export const renderStillSingleThread = async (
 			.upload(tempFilePath, {
 				destination: `renders/${renderId}/${body.outName ?? 'out.png'}`,
 				predefinedAcl: publicUpload ? 'publicRead' : 'projectPrivate',
+				metadata: getDownloadBehaviorSetting(body.downloadBehavior),
 			});
 
-		Log.info('Still uploaded');
+		Log.info({indent: false, logLevel: body.logLevel}, 'Still uploaded');
 
 		const uploadedFile = uploadedResponse[0];
 		const renderMetadata = await uploadedFile.getMetadata();
 		const responseData: RenderStillOnCloudrunOutput = {
 			publicUrl: uploadedFile.publicUrl(),
 			cloudStorageUri: uploadedFile.cloudStorageURI.href,
-			size: renderMetadata[0].size,
+			size: renderMetadata[0].size as number,
 			bucketName: body.outputBucket,
 			renderId,
 			type: 'success',
 			privacy: publicUpload ? 'public-read' : 'project-private',
 		};
 
-		RenderInternals.Log.info('Render Completed:', responseData);
+		RenderInternals.Log.info(
+			{indent: false, logLevel: body.logLevel},
+			'Render Completed:',
+			responseData,
+		);
 
 		res.end(JSON.stringify({response: responseData}));
 	} catch (err) {

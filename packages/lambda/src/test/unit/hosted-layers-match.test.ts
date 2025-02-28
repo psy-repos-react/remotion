@@ -1,7 +1,7 @@
-import {expect, test} from 'vitest';
+import {expect, test} from 'bun:test';
 import {
-	hostedLayers,
 	REMOTION_HOSTED_LAYER_ARN,
+	hostedLayers,
 } from '../../shared/hosted-layers';
 
 test('All hosted layers should match ARN', () => {

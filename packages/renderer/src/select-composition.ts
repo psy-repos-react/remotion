@@ -5,10 +5,10 @@ import type {BrowserLog} from './browser-log';
 import type {HeadlessBrowser} from './browser/Browser';
 import type {Page} from './browser/BrowserPage';
 import {DEFAULT_TIMEOUT} from './browser/TimeoutSettings';
+import {defaultBrowserDownloadProgress} from './browser/browser-download-progress-bar';
 import {handleJavascriptException} from './error-handling/handle-javascript-exception';
 import {findRemotionRoot} from './find-closest-package-json';
 import {getPageAndCleanupFn} from './get-browser-instance';
-import {type LogLevel} from './log-level';
 import {Log} from './logger';
 import type {ChromiumOptions} from './open-browser';
 import type {ToOptions} from './options/option';
@@ -18,6 +18,7 @@ import {makeOrReuseServer} from './prepare-server';
 import {puppeteerEvaluateWithCatch} from './puppeteer-evaluate';
 import {waitForReady} from './seek-to-frame';
 import {setPropsAndEnv} from './set-props-and-env';
+import type {RequiredInputPropsInV5} from './v5-required-input-props';
 import {validatePuppeteerTimeout} from './validate-puppeteer-timeout';
 import {wrapWithErrorHandling} from './wrap-with-error-handling';
 
@@ -27,40 +28,35 @@ type InternalSelectCompositionsConfig = {
 	puppeteerInstance: HeadlessBrowser | undefined;
 	onBrowserLog: null | ((log: BrowserLog) => void);
 	browserExecutable: BrowserExecutable | null;
-	timeoutInMilliseconds: number;
 	chromiumOptions: ChromiumOptions;
 	port: number | null;
 	indent: boolean;
 	server: RemotionServer | undefined;
-	logLevel: LogLevel;
 	serveUrl: string;
 	id: string;
-} & ToOptions<typeof optionsMap.renderStill>;
+	onServeUrlVisited: () => void;
+} & ToOptions<typeof optionsMap.selectComposition>;
 
-export type SelectCompositionOptions = {
-	inputProps?: Record<string, unknown> | null;
+export type SelectCompositionOptions = RequiredInputPropsInV5 & {
 	envVariables?: Record<string, string>;
 	puppeteerInstance?: HeadlessBrowser;
 	onBrowserLog?: (log: BrowserLog) => void;
 	browserExecutable?: BrowserExecutable;
-	timeoutInMilliseconds?: number;
 	chromiumOptions?: ChromiumOptions;
 	port?: number | null;
 	/**
 	 * @deprecated Use `logLevel` instead.
 	 */
 	verbose?: boolean;
-	logLevel?: LogLevel;
-	offthreadVideoCacheSizeInBytes?: number | null;
 	serveUrl: string;
 	id: string;
-};
+} & Partial<ToOptions<typeof optionsMap.selectComposition>>;
 
 type CleanupFn = () => Promise<unknown>;
 
 type InnerSelectCompositionConfig = Omit<
 	InternalSelectCompositionsConfig,
-	'port'
+	'port' | 'offthreadVideoThreads' | 'onBrowserLog'
 > & {
 	page: Page;
 	port: number;
@@ -68,7 +64,6 @@ type InnerSelectCompositionConfig = Omit<
 
 const innerSelectComposition = async ({
 	page,
-	onBrowserLog,
 	serializedInputPropsWithCustomSchema,
 	envVariables,
 	serveUrl,
@@ -77,17 +72,8 @@ const innerSelectComposition = async ({
 	id,
 	indent,
 	logLevel,
+	onServeUrlVisited,
 }: InnerSelectCompositionConfig): Promise<InternalReturnType> => {
-	if (onBrowserLog) {
-		page.on('console', (log) => {
-			onBrowserLog({
-				stackTrace: log.stackTrace(),
-				text: log.text,
-				type: log.type,
-			});
-		});
-	}
-
 	validatePuppeteerTimeout(timeoutInMilliseconds);
 
 	await setPropsAndEnv({
@@ -103,6 +89,7 @@ const innerSelectComposition = async ({
 		videoEnabled: false,
 		indent,
 		logLevel,
+		onServeUrlVisited,
 	});
 
 	await puppeteerEvaluateWithCatch({
@@ -156,7 +143,8 @@ const innerSelectComposition = async ({
 		ReturnType<typeof window.remotion_calculateComposition>
 	>;
 
-	const {width, durationInFrames, fps, height, defaultCodec} = res;
+	const {width, durationInFrames, fps, height, defaultCodec, defaultOutName} =
+		res;
 	return {
 		metadata: {
 			id,
@@ -171,6 +159,7 @@ const innerSelectComposition = async ({
 				res.serializedDefaultPropsWithCustomSchema,
 			),
 			defaultCodec,
+			defaultOutName,
 		},
 		propsSize: size,
 	};
@@ -200,16 +189,46 @@ export const internalSelectCompositionRaw = async (
 		server,
 		timeoutInMilliseconds,
 		offthreadVideoCacheSizeInBytes,
+		binariesDirectory,
+		onBrowserDownload,
+		onServeUrlVisited,
+		chromeMode,
 	} = options;
 
-	const {page, cleanup: cleanupPage} = await getPageAndCleanupFn({
-		passedInInstance: puppeteerInstance,
-		browserExecutable,
-		chromiumOptions,
-		forceDeviceScaleFactor: undefined,
-		indent,
-		logLevel,
-	});
+	const [{page, cleanupPage}, serverUsed] = await Promise.all([
+		getPageAndCleanupFn({
+			passedInInstance: puppeteerInstance,
+			browserExecutable,
+			chromiumOptions,
+			forceDeviceScaleFactor: undefined,
+			indent,
+			logLevel,
+			onBrowserDownload,
+			chromeMode,
+			pageIndex: 0,
+			onBrowserLog,
+		}),
+		makeOrReuseServer(
+			options.server,
+			{
+				webpackConfigOrServeUrl: serveUrlOrWebpackUrl,
+				port,
+				remotionRoot: findRemotionRoot(),
+				offthreadVideoThreads: 0,
+				logLevel,
+				indent,
+				offthreadVideoCacheSizeInBytes,
+				binariesDirectory,
+				forceIPv4: false,
+			},
+			{
+				onDownload: () => undefined,
+			},
+		).then((result) => {
+			cleanup.push(() => result.cleanupServer(true));
+			return result;
+		}),
+	]);
 	cleanup.push(() => cleanupPage());
 
 	return new Promise<InternalReturnType>((resolve, reject) => {
@@ -222,46 +241,28 @@ export const internalSelectCompositionRaw = async (
 				onError,
 			}),
 		);
+		page.setBrowserSourceMapGetter(serverUsed.server.sourceMap);
 
-		makeOrReuseServer(
-			options.server,
-			{
-				webpackConfigOrServeUrl: serveUrlOrWebpackUrl,
-				port,
-				remotionRoot: findRemotionRoot(),
-				concurrency: 1,
-				logLevel,
-				indent,
-				offthreadVideoCacheSizeInBytes,
-			},
-			{
-				onDownload: () => undefined,
-				onError,
-			},
-		)
-			.then(({server: {serveUrl, offthreadPort, sourceMap}, cleanupServer}) => {
-				page.setBrowserSourceMapGetter(sourceMap);
-				cleanup.push(() => cleanupServer(true));
-
-				return innerSelectComposition({
-					serveUrl,
-					page,
-					port: offthreadPort,
-					browserExecutable,
-					chromiumOptions,
-					envVariables,
-					id,
-					serializedInputPropsWithCustomSchema,
-					onBrowserLog,
-					timeoutInMilliseconds,
-					logLevel,
-					indent,
-					puppeteerInstance,
-					server,
-					offthreadVideoCacheSizeInBytes,
-				});
-			})
-
+		innerSelectComposition({
+			serveUrl: serverUsed.server.serveUrl,
+			page,
+			port: serverUsed.server.offthreadPort,
+			browserExecutable,
+			chromiumOptions,
+			envVariables,
+			id,
+			serializedInputPropsWithCustomSchema,
+			timeoutInMilliseconds,
+			logLevel,
+			indent,
+			puppeteerInstance,
+			server,
+			offthreadVideoCacheSizeInBytes,
+			binariesDirectory,
+			onBrowserDownload,
+			onServeUrlVisited,
+			chromeMode,
+		})
 			.then((data) => {
 				return resolve(data);
 			})
@@ -273,7 +274,7 @@ export const internalSelectCompositionRaw = async (
 					// Must prevent unhandled exception in cleanup function.
 					// Promise has already been resolved, so we can't reject it.
 					c().catch((err) => {
-						console.log('Cleanup error:', err);
+						Log.error({indent, logLevel}, 'Cleanup error:', err);
 					});
 				});
 			});
@@ -284,8 +285,8 @@ export const internalSelectComposition = wrapWithErrorHandling(
 	internalSelectCompositionRaw,
 );
 
-/**
- * @description Gets a composition defined in a Remotion project based on a Webpack bundle.
+/*
+ * @description Evaluates the list of compositions from a Remotion Bundle by evaluating the Remotion Root and evaluating `calculateMetadata()` on the specified composition.
  * @see [Documentation](https://www.remotion.dev/docs/renderer/select-composition)
  */
 export const selectComposition = async (
@@ -303,9 +304,16 @@ export const selectComposition = async (
 		puppeteerInstance,
 		timeoutInMilliseconds,
 		verbose,
-		logLevel,
+		logLevel: passedLogLevel,
 		offthreadVideoCacheSizeInBytes,
+		binariesDirectory,
+		onBrowserDownload,
+		chromeMode,
+		offthreadVideoThreads,
 	} = options;
+
+	const indent = false;
+	const logLevel = (passedLogLevel ?? verbose) ? 'verbose' : 'info';
 
 	const data = await internalSelectComposition({
 		id,
@@ -323,10 +331,21 @@ export const selectComposition = async (
 		port: port ?? null,
 		puppeteerInstance,
 		timeoutInMilliseconds: timeoutInMilliseconds ?? DEFAULT_TIMEOUT,
-		logLevel: logLevel ?? verbose ? 'verbose' : 'info',
-		indent: false,
+		logLevel,
+		indent,
 		server: undefined,
 		offthreadVideoCacheSizeInBytes: offthreadVideoCacheSizeInBytes ?? null,
+		binariesDirectory: binariesDirectory ?? null,
+		onBrowserDownload:
+			onBrowserDownload ??
+			defaultBrowserDownloadProgress({
+				indent,
+				logLevel,
+				api: 'selectComposition()',
+			}),
+		onServeUrlVisited: () => undefined,
+		chromeMode: chromeMode ?? 'headless-shell',
+		offthreadVideoThreads: offthreadVideoThreads ?? null,
 	});
 	return data.metadata;
 };

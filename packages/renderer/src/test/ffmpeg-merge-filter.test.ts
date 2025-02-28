@@ -1,7 +1,7 @@
-import {expect, test} from 'vitest';
+import {expect, test} from 'bun:test';
 import {createFfmpegMergeFilter} from '../create-ffmpeg-merge-filter';
 
-test('FFMPEG merge filters', () => {
+test('FFmpeg merge filters', () => {
 	const filter = createFfmpegMergeFilter({
 		inputs: [
 			{

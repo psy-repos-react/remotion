@@ -52,6 +52,7 @@ export const makeRetryPayload = (job: RenderJob): RenderModalState => {
 			inFrameMark: null,
 			outFrameMark: null,
 			initialOffthreadVideoCacheSizeInBytes: job.offthreadVideoCacheSizeInBytes,
+			initialOffthreadVideoThreads: job.offthreadVideoThreads,
 			initialColorSpace: defaults.colorSpace as ColorSpace,
 			initialMultiProcessOnLinux: job.multiProcessOnLinux,
 			defaultConfigurationVideoCodec: defaults.codec as Codec,
@@ -60,6 +61,11 @@ export const makeRetryPayload = (job: RenderJob): RenderModalState => {
 			initialUserAgent: job.chromiumOptions.userAgent,
 			initialBeep: job.beepOnFinish,
 			initialRepro: job.repro,
+			initialForSeamlessAacConcatenation: defaults.forSeamlessAacConcatenation,
+			defaulMetadata: job.metadata,
+			renderTypeOfLastRender: 'still',
+			initialHardwareAcceleration: defaults.hardwareAcceleration,
+			initialChromeMode: job.chromeMode,
 		};
 	}
 
@@ -98,6 +104,7 @@ export const makeRetryPayload = (job: RenderJob): RenderModalState => {
 			inFrameMark: job.startFrame,
 			outFrameMark: job.endFrame,
 			initialOffthreadVideoCacheSizeInBytes: job.offthreadVideoCacheSizeInBytes,
+			initialOffthreadVideoThreads: job.offthreadVideoThreads,
 			initialColorSpace: defaults.colorSpace as ColorSpace,
 			initialMultiProcessOnLinux: job.multiProcessOnLinux,
 			defaultConfigurationVideoCodec: defaults.codec as Codec,
@@ -107,6 +114,11 @@ export const makeRetryPayload = (job: RenderJob): RenderModalState => {
 			initialUserAgent: job.chromiumOptions.userAgent,
 			initialBeep: job.beepOnFinish,
 			initialRepro: job.repro,
+			initialForSeamlessAacConcatenation: defaults.forSeamlessAacConcatenation,
+			defaulMetadata: job.metadata,
+			renderTypeOfLastRender: 'sequence',
+			initialHardwareAcceleration: defaults.hardwareAcceleration,
+			initialChromeMode: job.chromeMode,
 		};
 	}
 
@@ -146,6 +158,7 @@ export const makeRetryPayload = (job: RenderJob): RenderModalState => {
 			inFrameMark: job.startFrame,
 			outFrameMark: job.endFrame,
 			initialOffthreadVideoCacheSizeInBytes: job.offthreadVideoCacheSizeInBytes,
+			initialOffthreadVideoThreads: job.offthreadVideoThreads,
 			initialColorSpace: job.colorSpace,
 			initialMultiProcessOnLinux: job.multiProcessOnLinux,
 			defaultConfigurationVideoCodec: job.codec,
@@ -155,6 +168,11 @@ export const makeRetryPayload = (job: RenderJob): RenderModalState => {
 			initialUserAgent: job.chromiumOptions.userAgent,
 			initialBeep: job.beepOnFinish,
 			initialRepro: job.repro,
+			initialForSeamlessAacConcatenation: job.forSeamlessAacConcatenation,
+			defaulMetadata: job.metadata,
+			renderTypeOfLastRender: 'video',
+			initialHardwareAcceleration: job.hardwareAcceleration,
+			initialChromeMode: job.chromeMode,
 		};
 	}
 

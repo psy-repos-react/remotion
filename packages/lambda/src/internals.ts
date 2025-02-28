@@ -1,13 +1,9 @@
-import {
-	getRenderProgressPayload,
-	makeLambdaRenderMediaPayload,
-	makeLambdaRenderStillPayload,
-} from './api/make-lambda-payload';
+import {internalDeploySite} from './api/deploy-site';
 import {executeCommand} from './cli/index';
 
 export const LambdaInternals = {
 	executeCommand,
-	makeLambdaRenderMediaPayload,
-	getRenderProgressPayload,
-	makeLambdaRenderStillPayload,
+	internalDeploySite,
 };
+
+export type {OverallRenderProgress as _InternalOverallRenderProgress} from '@remotion/serverless';

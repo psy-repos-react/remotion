@@ -1,8 +1,10 @@
 import type {
 	BrowserExecutable,
+	ChromeMode,
 	ChromiumOptions,
 	HeadlessBrowser,
 	LogLevel,
+	OnBrowserDownload,
 	RemotionServer,
 } from '@remotion/renderer';
 import {RenderInternals} from '@remotion/renderer';
@@ -15,11 +17,11 @@ const getCompName = ({
 	cliArgs,
 	compositionIdFromUi,
 }: {
-	cliArgs: string[];
+	cliArgs: (string | number)[];
 	compositionIdFromUi: string | null;
-}): {
+}): null | {
 	compName: string;
-	remainingArgs: string[];
+	remainingArgs: (string | number)[];
 	reason: string;
 } => {
 	if (compositionIdFromUi) {
@@ -30,9 +32,17 @@ const getCompName = ({
 		};
 	}
 
+	if (cliArgs.length === 0) {
+		return null;
+	}
+
 	const [compName, ...remainingArgs] = cliArgs;
 
-	return {compName, remainingArgs, reason: 'Passed as argument'};
+	return {
+		compName: String(compName),
+		remainingArgs,
+		reason: 'Passed as argument',
+	};
 };
 
 export const getCompositionId = async ({
@@ -50,8 +60,12 @@ export const getCompositionId = async ({
 	indent,
 	server,
 	offthreadVideoCacheSizeInBytes,
+	offthreadVideoThreads,
+	binariesDirectory,
+	onBrowserDownload,
+	chromeMode,
 }: {
-	args: string[];
+	args: (string | number)[];
 	compositionIdFromUi: string | null;
 	serializedInputPropsWithCustomSchema: string;
 	puppeteerInstance: HeadlessBrowser | undefined;
@@ -65,24 +79,25 @@ export const getCompositionId = async ({
 	indent: boolean;
 	server: RemotionServer;
 	offthreadVideoCacheSizeInBytes: number | null;
+	offthreadVideoThreads: number | null;
+	binariesDirectory: string | null;
+	onBrowserDownload: OnBrowserDownload;
+	chromeMode: ChromeMode;
 }): Promise<{
 	compositionId: string;
 	reason: string;
 	config: VideoConfig;
-	argsAfterComposition: string[];
+	argsAfterComposition: (string | number)[];
 }> => {
-	const {
-		compName,
-		remainingArgs,
-		reason: compReason,
-	} = getCompName({
+	const compNameResult = getCompName({
 		cliArgs: args,
 		compositionIdFromUi,
 	});
-	if (compName) {
+
+	if (compNameResult) {
 		const {metadata: config, propsSize} =
 			await RenderInternals.internalSelectComposition({
-				id: compName,
+				id: compNameResult.compName,
 				serializedInputPropsWithCustomSchema,
 				puppeteerInstance,
 				envVariables,
@@ -96,6 +111,11 @@ export const getCompositionId = async ({
 				indent,
 				onBrowserLog: null,
 				offthreadVideoCacheSizeInBytes,
+				offthreadVideoThreads,
+				binariesDirectory,
+				onBrowserDownload,
+				onServeUrlVisited: () => undefined,
+				chromeMode,
 			});
 
 		if (propsSize > 10_000_000) {
@@ -111,14 +131,16 @@ export const getCompositionId = async ({
 		}
 
 		if (!config) {
-			throw new Error(`Cannot find composition with ID "${compName}"`);
+			throw new Error(
+				`Cannot find composition with ID "${compNameResult.compName}"`,
+			);
 		}
 
 		return {
-			compositionId: compName,
-			reason: compReason,
+			compositionId: compNameResult.compName,
+			reason: compNameResult.reason,
 			config,
-			argsAfterComposition: remainingArgs,
+			argsAfterComposition: compNameResult.remainingArgs,
 		};
 	}
 
@@ -137,8 +159,15 @@ export const getCompositionId = async ({
 			onBrowserLog: null,
 			serializedInputPropsWithCustomSchema,
 			offthreadVideoCacheSizeInBytes,
+			offthreadVideoThreads,
+			binariesDirectory,
+			onBrowserDownload,
+			chromeMode,
 		});
-		const {compositionId, reason} = await showSingleCompositionsPicker(comps);
+		const {compositionId, reason} = await showSingleCompositionsPicker(
+			comps,
+			logLevel,
+		);
 		if (compositionId && typeof compositionId === 'string') {
 			return {
 				compositionId,
@@ -149,7 +178,10 @@ export const getCompositionId = async ({
 		}
 	}
 
-	Log.error('Composition ID not passed.');
-	Log.error('Pass an extra argument <composition-id>.');
+	Log.error({indent: false, logLevel}, 'Composition ID not passed.');
+	Log.error(
+		{indent: false, logLevel},
+		'Pass an extra argument <composition-id>.',
+	);
 	process.exit(1);
 };

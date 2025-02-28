@@ -1,43 +1,10 @@
-// Must keep this file synced with payloads.rs!
-export type Layer =
-	| {
-			type: 'PngImage';
-			params: {
-				src: string;
-				x: number;
-				y: number;
-				width: number;
-				height: number;
-			};
-	  }
-	| {
-			type: 'JpgImage';
-			params: {
-				src: string;
-				x: number;
-				y: number;
-				width: number;
-				height: number;
-			};
-	  }
-	| {
-			type: 'Solid';
-			params: {
-				fill: [number, number, number, number];
-				x: number;
-				y: number;
-				width: number;
-				height: number;
-			};
-	  };
-
 export type CompositorImageFormat = 'Png' | 'Jpeg';
 
 export type VideoMetadata = {
 	fps: number;
 	width: number;
 	height: number;
-	durationInSeconds: number;
+	durationInSeconds: number | null;
 	codec: 'h264' | 'h265' | 'vp8' | 'vp9' | 'av1' | 'prores' | 'unknown';
 	canPlayInVideoTag: boolean;
 	supportsSeeking: boolean;
@@ -197,7 +164,7 @@ export type VideoMetadata = {
 		| 'unknown';
 };
 
-type SilentPart = {
+export type SilentPart = {
 	startInSeconds: number;
 	endInSeconds: number;
 };
@@ -214,18 +181,12 @@ export type GetSilentPartsResponse = GetSilentPartsResponseRust & {
 };
 
 export type CompositorCommand = {
-	Compose: {
-		output: string;
-		width: number;
-		height: number;
-		layers: Layer[];
-		output_format: CompositorImageFormat;
-	};
 	ExtractFrame: {
 		src: string;
 		original_src: string;
 		time: number;
 		transparent: boolean;
+		tone_mapped: boolean;
 	};
 	GetSilences: {
 		src: string;
@@ -239,9 +200,6 @@ export type CompositorCommand = {
 		concurrency: number;
 		maximum_frame_cache_size_in_bytes: number | null;
 		verbose: boolean;
-	};
-	CopyImageToClipboard: {
-		src: string;
 	};
 	GetOpenVideoStats: {};
 	DeliberatePanic: {};

@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test} from 'bun:test';
 import {getDesiredPort} from '../get-port';
 
 test('Port selection should only be freed once the previous result has been used', async () => {
@@ -15,7 +15,10 @@ test('Port selection should only be freed once the previous result has been used
 		from: 3100,
 		to: 3200,
 		hostsToTry: ['::', '::1'],
-	}).then(() => ports++);
+	}).then(({unlockPort: unlock}) => {
+		ports++;
+		unlock();
+	});
 
 	await new Promise<void>((resolve) => {
 		setTimeout(resolve, 2000);
@@ -24,5 +27,6 @@ test('Port selection should only be freed once the previous result has been used
 	expect(ports).toBe(0);
 	unlockPort();
 	await secondPort;
+
 	expect(ports).toBe(1);
 });

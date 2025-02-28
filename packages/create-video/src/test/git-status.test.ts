@@ -1,5 +1,5 @@
+import {expect, test} from 'bun:test';
 import path from 'node:path';
-import {expect, test} from 'vitest';
 import {checkGitAvailability} from '../init';
 
 test('Get git status', async () => {
@@ -13,6 +13,8 @@ test('Get git status', async () => {
 	expect(
 		status.location ===
 			path.posix.join(__dirname, '..', '..', '..', '..').replace(/\\/g, '/') ||
+			status.location ===
+				path.join(__dirname, '..', '..', '..', '..').replace(/\\/g, '/') ||
 			status.location === 'D:/a/remotion/remotion',
 	).toEqual(true);
 

@@ -1,8 +1,10 @@
 import type {
 	BrowserExecutable,
+	ChromeMode,
 	ChromiumOptions,
 	HeadlessBrowser,
 	LogLevel,
+	OnBrowserDownload,
 	RemotionServer,
 } from '@remotion/renderer';
 import type {VideoConfig} from 'remotion';
@@ -25,10 +27,14 @@ export const getCompositionWithDimensionOverride = async ({
 	logLevel,
 	server,
 	offthreadVideoCacheSizeInBytes,
+	offthreadVideoThreads,
+	binariesDirectory,
+	onBrowserDownload,
+	chromeMode,
 }: {
 	height: number | null;
 	width: number | null;
-	args: string[];
+	args: (string | number)[];
 	compositionIdFromUi: string | null;
 	timeoutInMilliseconds: number;
 	puppeteerInstance: HeadlessBrowser | undefined;
@@ -42,11 +48,15 @@ export const getCompositionWithDimensionOverride = async ({
 	serializedInputPropsWithCustomSchema: string;
 	server: RemotionServer;
 	offthreadVideoCacheSizeInBytes: number | null;
+	offthreadVideoThreads: number | null;
+	binariesDirectory: string | null;
+	onBrowserDownload: OnBrowserDownload;
+	chromeMode: ChromeMode;
 }): Promise<{
 	compositionId: string;
 	reason: string;
 	config: VideoConfig;
-	argsAfterComposition: string[];
+	argsAfterComposition: (string | number)[];
 }> => {
 	const returnValue = await getCompositionId({
 		args,
@@ -63,6 +73,10 @@ export const getCompositionWithDimensionOverride = async ({
 		timeoutInMilliseconds,
 		server,
 		offthreadVideoCacheSizeInBytes,
+		binariesDirectory,
+		onBrowserDownload,
+		chromeMode,
+		offthreadVideoThreads,
 	});
 
 	return {

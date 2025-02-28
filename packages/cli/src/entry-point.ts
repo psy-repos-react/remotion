@@ -1,6 +1,6 @@
 import type {LogLevel} from '@remotion/renderer';
 import {RenderInternals} from '@remotion/renderer';
-import {existsSync, lstatSync} from 'node:fs';
+import {existsSync} from 'node:fs';
 import path from 'node:path';
 import {ConfigInternals} from './config';
 import {Log} from './log';
@@ -14,6 +14,10 @@ const candidates = [
 	path.join('remotion', 'index.ts'),
 	path.join('remotion', 'index.js'),
 	path.join('remotion', 'index.mjs'),
+	path.join('src', 'remotion', 'index.tsx'),
+	path.join('src', 'remotion', 'index.ts'),
+	path.join('src', 'remotion', 'index.js'),
+	path.join('src', 'remotion', 'index.mjs'),
 ];
 
 const findCommonPath = (remotionRoot: string) => {
@@ -30,13 +34,19 @@ type FoundReason =
 	| 'common paths'
 	| 'none found';
 
-export const findEntryPoint = (
-	args: string[],
-	remotionRoot: string,
-	logLevel: LogLevel,
-): {
+export const findEntryPoint = ({
+	args,
+	logLevel,
+	remotionRoot,
+	allowDirectory,
+}: {
+	args: (string | number)[];
+	remotionRoot: string;
+	logLevel: LogLevel;
+	allowDirectory: boolean;
+}): {
 	file: string | null;
-	remainingArgs: string[];
+	remainingArgs: (string | number)[];
 	reason: FoundReason;
 } => {
 	const result = findEntryPointInner(args, remotionRoot, logLevel);
@@ -54,7 +64,7 @@ export const findEntryPoint = (
 		);
 	}
 
-	if (lstatSync(result.file).isDirectory()) {
+	if (result.isDirectory && !allowDirectory) {
 		throw new Error(
 			`${result.file} was chosen as the entry point (reason = ${result.reason}) but it is a directory - it needs to be a file.`,
 		);
@@ -63,17 +73,22 @@ export const findEntryPoint = (
 	return result;
 };
 
+const isBundledCode = (p: string) => {
+	return existsSync(p) && existsSync(path.join(p, 'index.html'));
+};
+
 const findEntryPointInner = (
-	args: string[],
+	args: (string | number)[],
 	remotionRoot: string,
 	logLevel: LogLevel,
 ): {
 	file: string | null;
-	remainingArgs: string[];
+	isDirectory: boolean;
+	remainingArgs: (string | number)[];
 	reason: FoundReason;
 } => {
 	// 1st priority: Explicitly passed entry point
-	let file: string | null = args[0];
+	let file: string | null = args[0] ? args[0].toString() : null;
 	if (file) {
 		Log.verbose(
 			{indent: false, logLevel},
@@ -89,6 +104,7 @@ const findEntryPointInner = (
 				file: cwdResolution,
 				remainingArgs: args.slice(1),
 				reason: 'argument passed - found in cwd',
+				isDirectory: isBundledCode(cwdResolution),
 			};
 		}
 
@@ -98,11 +114,17 @@ const findEntryPointInner = (
 				file: remotionRootResolution,
 				remainingArgs: args.slice(1),
 				reason: 'argument passed - found in root',
+				isDirectory: isBundledCode(remotionRootResolution),
 			};
 		}
 
 		if (RenderInternals.isServeUrl(file)) {
-			return {file, remainingArgs: args.slice(1), reason: 'argument passed'};
+			return {
+				file,
+				remainingArgs: args.slice(1),
+				reason: 'argument passed',
+				isDirectory: false,
+			};
 		}
 	}
 
@@ -119,6 +141,7 @@ const findEntryPointInner = (
 			file: path.resolve(remotionRoot, file),
 			remainingArgs: args,
 			reason: 'config file',
+			isDirectory: isBundledCode(path.resolve(remotionRoot, file)),
 		};
 	}
 
@@ -137,8 +160,14 @@ const findEntryPointInner = (
 			file: absolutePath,
 			remainingArgs: args,
 			reason: 'common paths',
+			isDirectory: false,
 		};
 	}
 
-	return {file: null, remainingArgs: args, reason: 'none found'};
+	return {
+		file: null,
+		remainingArgs: args,
+		reason: 'none found',
+		isDirectory: false,
+	};
 };

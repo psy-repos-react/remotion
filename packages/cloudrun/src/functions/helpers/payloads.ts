@@ -17,6 +17,18 @@ const chromiumOptions = z.object({
 });
 const logLevel = z.enum(BrowserSafeApis.logLevels);
 
+const downloadBehavior = z.discriminatedUnion('type', [
+	z.object({
+		type: z.literal('play-in-browser'),
+	}),
+	z.object({
+		type: z.literal('download'),
+		fileName: z.string().nullable(),
+	}),
+]);
+
+export type DownloadBehavior = z.infer<typeof downloadBehavior>;
+
 export const CloudRunPayload = z.discriminatedUnion('type', [
 	z.object({
 		type: z.literal('media'),
@@ -53,8 +65,21 @@ export const CloudRunPayload = z.discriminatedUnion('type', [
 		enforceAudioTrack: z.boolean(),
 		preferLossless: z.boolean(),
 		offthreadVideoCacheSizeInBytes: z.number().nullable(),
-		colorSpace: z.enum(BrowserSafeApis.validColorSpaces),
+		offthreadVideoThreads: z.number().nullable(),
+		colorSpace: z.enum(BrowserSafeApis.validColorSpaces).nullable(),
 		clientVersion: z.string(),
+		downloadBehavior,
+		metadata: z.record(z.string()).optional().nullable(),
+		renderIdOverride: z.string().optional().nullable(),
+		renderStatusWebhook: z
+			.object({
+				url: z.string(),
+				headers: z.record(z.string()),
+				data: z.any(),
+				webhookProgressInterval: z.number().min(0).max(1).optional().nullable(),
+			})
+			.optional()
+			.nullable(),
 	}),
 	z.object({
 		type: z.literal('still'),
@@ -70,15 +95,29 @@ export const CloudRunPayload = z.discriminatedUnion('type', [
 		envVariables: z.record(z.string()),
 		chromiumOptions: chromiumOptions.optional(),
 		outputBucket: z.string(),
-		outName: z.string().optional(),
+		outName: z.string().nullable(),
 		frame: z.number(),
 		delayRenderTimeoutInMilliseconds: z.number(),
 		logLevel,
 		offthreadVideoCacheSizeInBytes: z.number().nullable(),
+		offthreadVideoThreads: z.number().nullable(),
 		clientVersion: z.string(),
+		downloadBehavior,
+		metadata: z.record(z.string()).optional().nullable(),
+		renderIdOverride: z.string().optional().nullable(),
+		renderStatusWebhook: z
+			.object({
+				url: z.string(),
+				headers: z.record(z.string()),
+				data: z.any(),
+				webhookProgressInterval: z.number().min(0).max(1).optional().nullable(),
+			})
+			.optional()
+			.nullable(),
 	}),
 ]);
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const renderFailResponsePayload = z.object({
 	type: z.literal('error'),
 	message: z.string(),
@@ -86,6 +125,7 @@ const renderFailResponsePayload = z.object({
 	stack: z.string(),
 });
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const renderStillOnCloudrunResponsePayload = z.object({
 	type: z.literal('success'),
 	publicUrl: z.string().optional().nullable(),
@@ -96,6 +136,7 @@ const renderStillOnCloudrunResponsePayload = z.object({
 	privacy: z.enum(['public-read', 'project-private']),
 });
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const renderMediaOnCloudrunResponsePayload = z.object({
 	type: z.literal('success'),
 	publicUrl: z.string().optional().nullable(),
@@ -106,6 +147,7 @@ const renderMediaOnCloudrunResponsePayload = z.object({
 	privacy: z.enum(['public-read', 'project-private']),
 });
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const cloudRunCrashResponse = z.object({
 	type: z.literal('crash'),
 	cloudRunEndpoint: z.string(),

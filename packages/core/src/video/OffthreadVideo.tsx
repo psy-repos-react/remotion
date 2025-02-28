@@ -1,20 +1,28 @@
 import React, {useCallback} from 'react';
-import {getRemotionEnvironment} from '../get-remotion-environment.js';
 import {Sequence} from '../Sequence.js';
+import {getRemotionEnvironment} from '../get-remotion-environment.js';
 import {validateMediaProps} from '../validate-media-props.js';
 import {validateStartFromProps} from '../validate-start-from-props.js';
 import {OffthreadVideoForRendering} from './OffthreadVideoForRendering.js';
+import {VideoForPreview} from './VideoForPreview.js';
 import type {OffthreadVideoProps} from './props.js';
-import {VideoForDevelopment} from './VideoForDevelopment.js';
 
-/**
+/*
  * @description This method imports and displays a video, similar to <Video />. During rendering, it extracts the exact frame from the video and displays it in an <img> tag
  * @see [Documentation](https://www.remotion.dev/docs/offthreadvideo)
  */
 export const OffthreadVideo: React.FC<OffthreadVideoProps> = (props) => {
 	// Should only destruct `startFrom` and `endAt` from props,
 	// rest gets drilled down
-	const {startFrom, endAt, name, stack, ...otherProps} = props;
+	const {
+		startFrom,
+		endAt,
+		name,
+		pauseWhenBuffering,
+		stack,
+		showInTimeline,
+		...otherProps
+	} = props;
 	const environment = getRemotionEnvironment();
 
 	const onDuration = useCallback(() => undefined, []);
@@ -46,7 +54,10 @@ export const OffthreadVideo: React.FC<OffthreadVideoProps> = (props) => {
 				durationInFrames={endAtFrameNo}
 				name={name}
 			>
-				<OffthreadVideo {...otherProps} />
+				<OffthreadVideo
+					pauseWhenBuffering={pauseWhenBuffering ?? false}
+					{...otherProps}
+				/>
 			</Sequence>
 		);
 	}
@@ -57,15 +68,29 @@ export const OffthreadVideo: React.FC<OffthreadVideoProps> = (props) => {
 		return <OffthreadVideoForRendering {...otherProps} />;
 	}
 
-	const {transparent, ...withoutTransparent} = otherProps;
+	const {
+		transparent,
+		toneMapped,
+		onAutoPlayError,
+		onVideoFrame,
+		crossOrigin,
+		delayRenderRetries,
+		delayRenderTimeoutInMilliseconds,
+		...propsForPreview
+	} = otherProps;
 
 	return (
-		<VideoForDevelopment
+		<VideoForPreview
 			_remotionInternalStack={stack ?? null}
 			_remotionInternalNativeLoopPassed={false}
 			onDuration={onDuration}
 			onlyWarnForMediaSeekingError
-			{...withoutTransparent}
+			pauseWhenBuffering={pauseWhenBuffering ?? false}
+			showInTimeline={showInTimeline ?? true}
+			onAutoPlayError={onAutoPlayError ?? undefined}
+			onVideoFrame={onVideoFrame ?? null}
+			crossOrigin={crossOrigin}
+			{...propsForPreview}
 		/>
 	);
 };

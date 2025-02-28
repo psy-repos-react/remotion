@@ -1,13 +1,10 @@
 import type {RenderJob} from '@remotion/studio-shared';
 import {useCallback} from 'react';
+import {remotion_outputsBase} from '../../helpers/get-asset-metadata';
 import {ClipboardIcon} from '../../icons/clipboard';
 import type {RenderInlineAction} from '../InlineAction';
 import {InlineAction} from '../InlineAction';
-import {
-	notificationCenter,
-	sendErrorNotification,
-} from '../Notifications/NotificationCenter';
-import {copyToClipboard} from './actions';
+import {showNotification} from '../Notifications/NotificationCenter';
 
 const revealIconStyle: React.CSSProperties = {
 	height: 12,
@@ -42,20 +39,31 @@ export const RenderQueueCopyToClipboard: React.FC<{
 	}, []);
 
 	const onClick: React.MouseEventHandler = useCallback(
-		(e) => {
+		async (e) => {
 			e.stopPropagation();
-			copyToClipboard({outName: job.outName})
-				.catch((err) => {
-					sendErrorNotification(`Could not copy to clipboard: ${err.message}`);
-				})
-				.then(() => {
-					notificationCenter.current?.addNotification({
-						content: 'Copied to clipboard',
-						created: Date.now(),
-						duration: 1000,
-						id: String(Math.random()),
-					});
-				});
+			try {
+				const src = `${remotion_outputsBase}/${job.outName}`;
+
+				const content = await fetch(src);
+				const contentType = content.headers.get('content-type');
+				if (!contentType) {
+					throw new Error('Expected content-type header');
+				}
+
+				const blob = await content.blob();
+
+				await navigator.clipboard.write([
+					new ClipboardItem({
+						[contentType]: blob,
+					}),
+				]);
+				showNotification('Copied to clipboard!', 1000);
+			} catch (err) {
+				showNotification(
+					`Could not copy to clipboard: ${(err as Error).message}`,
+					2000,
+				);
+			}
 		},
 		[job.outName],
 	);

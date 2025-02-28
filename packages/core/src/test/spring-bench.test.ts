@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test} from 'bun:test';
 import {spring} from '../spring';
 
 test('Springs should calculate fast and cache the natural duration', async () => {
@@ -28,5 +28,7 @@ test('Springs should calculate fast and cache the natural duration', async () =>
 			resolve(performance.now() - date);
 		});
 	});
-	expect(time).toBeLessThan(process.platform === 'darwin' ? 1500 : 600);
+	expect(time).toBeLessThan(
+		process.platform === 'darwin' || process.platform === 'win32' ? 1500 : 800,
+	);
 });

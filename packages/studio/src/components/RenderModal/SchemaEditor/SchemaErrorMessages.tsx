@@ -1,8 +1,8 @@
 import type {z} from 'zod';
-import {BLUE, LIGHT_TEXT} from '../../../helpers/colors';
+import {BACKGROUND, BLUE, LIGHT_TEXT} from '../../../helpers/colors';
 import {Button} from '../../Button';
-import {Spacing} from '../../layout';
 import {inlineCodeSnippet} from '../../Menu/styles';
+import {Spacing} from '../../layout';
 import {ZodErrorMessages} from './ZodErrorMessages';
 
 const explainer: React.CSSProperties = {
@@ -13,6 +13,7 @@ const explainer: React.CSSProperties = {
 	justifyContent: 'center',
 	alignItems: 'center',
 	textAlign: 'center',
+	background: BACKGROUND,
 };
 
 const errorExplanation: React.CSSProperties = {

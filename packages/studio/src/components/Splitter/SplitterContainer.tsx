@@ -1,4 +1,4 @@
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useMemo, useRef, useState} from 'react';
 import {useTimelineFlex} from '../../state/timeline';
 import type {
 	SplitterDragState,
@@ -12,9 +12,10 @@ const containerRow: React.CSSProperties = {
 	flexDirection: 'row',
 	flex: 1,
 	height: '100%',
+	width: '100%',
 };
 
-const containerColumn: React.CSSProperties = {
+export const containerColumn: React.CSSProperties = {
 	display: 'flex',
 	flexDirection: 'column',
 	flex: 1,
@@ -22,48 +23,25 @@ const containerColumn: React.CSSProperties = {
 };
 
 export const SplitterContainer: React.FC<{
-	orientation: SplitterOrientation;
-	maxFlex: number;
-	minFlex: number;
-	id: string;
-	defaultFlex: number;
-	children: React.ReactNode;
+	readonly orientation: SplitterOrientation;
+	readonly maxFlex: number;
+	readonly minFlex: number;
+	readonly id: string;
+	readonly defaultFlex: number;
+	readonly children: React.ReactNode;
 }> = ({orientation, children, defaultFlex, maxFlex, minFlex, id}) => {
 	const [initialTimelineFlex, persistFlex] = useTimelineFlex(id);
 	const [flexValue, setFlexValue] = useState(
 		initialTimelineFlex ?? defaultFlex,
 	);
 
-	const [domRect, setDomRect] = useState<DOMRect | DOMRectReadOnly | null>(
-		null,
-	);
 	const ref = useRef<HTMLDivElement>(null);
 	const isDragging = useRef<SplitterDragState>(false);
-
-	const [resizeObserver] = useState(() => {
-		return new ResizeObserver((entries) => {
-			setDomRect(entries[0].contentRect);
-		});
-	});
-
-	useEffect(() => {
-		const {current} = ref;
-		if (!current) {
-			return;
-		}
-
-		resizeObserver.observe(current);
-		return () => resizeObserver.unobserve(current);
-	}, [resizeObserver]);
-
-	useEffect(() => {
-		setDomRect(ref.current?.getBoundingClientRect() ?? null);
-	}, []);
 
 	const value: TSplitterContext = useMemo(() => {
 		return {
 			flexValue,
-			domRect,
+			ref,
 			setFlexValue,
 			isDragging,
 			orientation,
@@ -75,13 +53,13 @@ export const SplitterContainer: React.FC<{
 		};
 	}, [
 		defaultFlex,
-		domRect,
 		flexValue,
 		id,
 		maxFlex,
 		minFlex,
 		orientation,
 		persistFlex,
+		ref,
 	]);
 
 	return (

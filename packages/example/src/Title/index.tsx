@@ -1,10 +1,10 @@
 import {fillTextBox, measureText} from '@remotion/layout-utils';
 import React from 'react';
-import {spring, SpringConfig, useCurrentFrame, useVideoConfig} from 'remotion';
+import {SpringConfig, spring, useCurrentFrame, useVideoConfig} from 'remotion';
 
 export const Title: React.FC<{
-	line1: string;
-	line2: string;
+	readonly line1: string;
+	readonly line2: string;
 }> = ({line1, line2}) => {
 	const {fps} = useVideoConfig();
 	const frame = useCurrentFrame();
@@ -43,7 +43,7 @@ export const Title: React.FC<{
 	};
 	const {width, height} = measureText({
 		text: `${line1} ${line2}`,
-		fontFamily: fontStyle.fontFamily,
+		fontFamily: 'does not compute',
 		fontSize: fontStyle.fontSize,
 	});
 	const box = fillTextBox({maxBoxWidth: 270, maxLines: 1});

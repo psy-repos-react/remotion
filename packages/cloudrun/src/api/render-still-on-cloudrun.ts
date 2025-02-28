@@ -1,16 +1,18 @@
 import type {
 	ChromiumOptions,
-	LogLevel,
 	StillImageFormat,
 	ToOptions,
 } from '@remotion/renderer';
 import {BrowserSafeApis} from '@remotion/renderer/client';
-import {NoReactAPIs} from '@remotion/renderer/pure';
+import {wrapWithErrorHandling} from '@remotion/renderer/error-handling';
 import {NoReactInternals} from 'remotion/no-react';
 import {VERSION} from 'remotion/version';
+import type {z} from 'zod';
 import type {
 	CloudRunCrashResponse,
+	CloudRunPayload,
 	CloudRunPayloadType,
+	DownloadBehavior,
 	ErrorResponsePayload,
 	RenderStillOnCloudrunOutput,
 } from '../functions/helpers/payloads';
@@ -21,27 +23,33 @@ import {getOrCreateBucket} from './get-or-create-bucket';
 import {getAuthClientForUrl} from './helpers/get-auth-client-for-url';
 import {getCloudrunEndpoint} from './helpers/get-cloudrun-endpoint';
 
-export type RenderStillOnCloudrunInput = {
-	cloudRunUrl?: string;
-	serviceName?: string;
+type MandatoryParameters = {
 	region: GcpRegion;
 	serveUrl: string;
 	composition: string;
-	inputProps?: Record<string, unknown>;
-	privacy?: 'public' | 'private';
-	forceBucketName?: string;
-	outName?: string;
 	imageFormat: StillImageFormat;
-	envVariables?: Record<string, string>;
-	frame?: number;
-	jpegQuality?: number;
-	chromiumOptions?: ChromiumOptions;
-	scale?: number;
-	forceWidth?: number | null;
-	forceHeight?: number | null;
-	logLevel?: LogLevel;
-	delayRenderTimeoutInMilliseconds?: number;
-} & Partial<ToOptions<typeof BrowserSafeApis.optionsMap.renderMediaOnLambda>>;
+};
+
+type OptionalParameters = {
+	cloudRunUrl: string | null;
+	serviceName: string | null;
+	inputProps: Record<string, unknown>;
+	privacy: 'public' | 'private';
+	forceBucketName: string | null;
+	outName: string | null;
+	envVariables: Record<string, string>;
+	frame: number;
+	chromiumOptions: ChromiumOptions;
+	forceWidth: number | null;
+	forceHeight: number | null;
+	indent: boolean;
+	downloadBehavior: DownloadBehavior;
+	renderIdOverride: z.infer<typeof CloudRunPayload>['renderIdOverride'];
+	renderStatusWebhook: z.infer<typeof CloudRunPayload>['renderStatusWebhook'];
+} & ToOptions<typeof BrowserSafeApis.optionsMap.renderStillOnCloudRun>;
+
+export type RenderStillOnCloudrunInput = Partial<OptionalParameters> &
+	MandatoryParameters;
 
 /**
  * @description Triggers a render on a GCP Cloud Run service given a composition and a Cloud Run URL.
@@ -65,10 +73,11 @@ export type RenderStillOnCloudrunInput = {
  * @param params.forceHeight Overrides default composition height.
  * @param params.logLevel Level of logging that Cloud Run service should perform. Default "info".
  * @param params.delayRenderTimeoutInMilliseconds A number describing how long the render may take to resolve all delayRender() calls before it times out.
+ * @param params.metadata Metadata to be attached to the output file.
  * @returns {Promise<RenderStillOnCloudrunOutput>} See documentation for detailed structure
  */
 
-const renderStillOnCloudrunRaw = async ({
+const internalRenderStillOnCloudRun = async ({
 	cloudRunUrl,
 	serviceName,
 	region,
@@ -89,7 +98,11 @@ const renderStillOnCloudrunRaw = async ({
 	logLevel,
 	delayRenderTimeoutInMilliseconds,
 	offthreadVideoCacheSizeInBytes,
-}: RenderStillOnCloudrunInput): Promise<
+	offthreadVideoThreads,
+	downloadBehavior,
+	renderIdOverride,
+	renderStatusWebhook,
+}: OptionalParameters & MandatoryParameters): Promise<
 	RenderStillOnCloudrunOutput | ErrorResponsePayload | CloudRunCrashResponse
 > => {
 	validateServeUrl(serveUrl);
@@ -115,27 +128,30 @@ const renderStillOnCloudrunRaw = async ({
 			}).serializedString,
 		outputBucket,
 		outName,
-		privacy: privacy ?? 'public',
+		privacy,
 		imageFormat,
-		envVariables: envVariables ?? {},
+		envVariables,
 		jpegQuality,
 		chromiumOptions,
-		scale: scale ?? 1,
+		scale,
 		forceWidth,
 		forceHeight,
-		frame: frame ?? 0,
+		frame,
 		type: 'still',
-		logLevel: logLevel ?? 'info',
-		delayRenderTimeoutInMilliseconds:
-			delayRenderTimeoutInMilliseconds ?? BrowserSafeApis.DEFAULT_TIMEOUT,
-		offthreadVideoCacheSizeInBytes: offthreadVideoCacheSizeInBytes ?? null,
+		logLevel,
+		delayRenderTimeoutInMilliseconds,
+		offthreadVideoCacheSizeInBytes,
+		offthreadVideoThreads,
 		clientVersion: VERSION,
+		downloadBehavior,
+		renderIdOverride,
+		renderStatusWebhook,
 	};
 
 	const client = await getAuthClientForUrl(cloudRunEndpoint);
 
 	const postResponse = await client.request({
-		url: cloudRunUrl,
+		url: cloudRunEndpoint,
 		method: 'POST',
 		data,
 		responseType: 'stream',
@@ -163,7 +179,7 @@ const renderStillOnCloudrunRaw = async ({
 			try {
 				parsedData = JSON.parse(accumulatedChunks.trim());
 				accumulatedChunks = ''; // Clear the buffer after successful parsing.
-			} catch (e) {
+			} catch {
 				// If parsing fails, it means we don't have a complete JSON string yet.
 				// We'll wait for more chunks.
 				return;
@@ -207,6 +223,36 @@ const renderStillOnCloudrunRaw = async ({
 	return renderResponse;
 };
 
-export const renderStillOnCloudrun = NoReactAPIs.wrapWithErrorHandling(
-	renderStillOnCloudrunRaw,
-) as typeof renderStillOnCloudrunRaw;
+const errorHandled = wrapWithErrorHandling(internalRenderStillOnCloudRun);
+
+export const renderStillOnCloudrun = (options: RenderStillOnCloudrunInput) => {
+	return errorHandled({
+		chromiumOptions: options.chromiumOptions ?? {},
+		cloudRunUrl: options.cloudRunUrl ?? null,
+		composition: options.composition,
+		delayRenderTimeoutInMilliseconds:
+			options.delayRenderTimeoutInMilliseconds ?? 30000,
+		envVariables: options.envVariables ?? {},
+		forceBucketName: options.forceBucketName ?? null,
+		forceHeight: options.forceHeight ?? null,
+		forceWidth: options.forceWidth ?? null,
+		frame: options.frame ?? 0,
+		imageFormat: options.imageFormat,
+		indent: options.indent ?? false,
+		inputProps: options.inputProps ?? {},
+		jpegQuality: options.jpegQuality ?? BrowserSafeApis.DEFAULT_JPEG_QUALITY,
+		logLevel: options.logLevel ?? 'info',
+		offthreadVideoCacheSizeInBytes:
+			options.offthreadVideoCacheSizeInBytes ?? null,
+		offthreadVideoThreads: options.offthreadVideoThreads ?? null,
+		outName: options.outName ?? null,
+		privacy: options.privacy ?? 'public',
+		region: options.region,
+		scale: options.scale ?? 1,
+		serveUrl: options.serveUrl,
+		serviceName: options.serviceName ?? null,
+		downloadBehavior: options.downloadBehavior ?? {type: 'play-in-browser'},
+		renderIdOverride: options.renderIdOverride ?? undefined,
+		renderStatusWebhook: options.renderStatusWebhook ?? undefined,
+	});
+};

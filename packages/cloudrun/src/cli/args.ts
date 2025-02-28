@@ -10,17 +10,21 @@ type servicesCommandLineOptions = {
 	y: boolean;
 	yes: boolean;
 	force: boolean;
+	['onlyAllocateCpuDuringRequestProcessing']: boolean;
 	f: boolean;
 
 	['max-retries']: number;
 	['out-name']: string | undefined;
 	['output-bucket']: string;
 	['output-folder-path']: string;
+	webhook: string;
+	['render-id-override']: string;
 };
 
 export const parsedCloudrunCli =
 	CliInternals.minimist<servicesCommandLineOptions>(process.argv.slice(2), {
 		boolean: CliInternals.BooleanFlags,
+		string: ['_'],
 	});
 
 export const forceFlagProvided =

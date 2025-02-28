@@ -14,22 +14,15 @@
  * limitations under the License.
  */
 import {NoReactInternals} from 'remotion/no-react';
+import {BrowserLog} from '../browser-log';
 import {formatRemoteObject} from '../format-logs';
 import type {LogLevel} from '../log-level';
 import {Log} from '../logger';
 import {truthy} from '../truthy';
-import {assert} from './assert';
 import type {HeadlessBrowser} from './Browser';
 import type {CDPSession} from './Connection';
 import type {ConsoleMessageType} from './ConsoleMessage';
 import {ConsoleMessage} from './ConsoleMessage';
-import type {
-	AttachedToTargetEvent,
-	BindingCalledEvent,
-	ConsoleAPICalledEvent,
-	EntryAddedEvent,
-	StackTrace,
-} from './devtools-types';
 import type {
 	EvaluateFn,
 	EvaluateFnReturnType,
@@ -44,10 +37,19 @@ import type {HTTPResponse} from './HTTPResponse';
 import type {JSHandle} from './JSHandle';
 import {_createJSHandle} from './JSHandle';
 import type {Viewport} from './PuppeteerViewport';
-import type {SourceMapGetter} from './source-map-getter';
 import type {Target} from './Target';
 import {TaskQueue} from './TaskQueue';
 import {TimeoutSettings} from './TimeoutSettings';
+import {assert} from './assert';
+import type {
+	AttachedToTargetEvent,
+	BindingCalledEvent,
+	ConsoleAPICalledEvent,
+	EntryAddedEvent,
+	SetDeviceMetricsOverrideRequest,
+	StackTrace,
+} from './devtools-types';
+import type {SourceMapGetter} from './source-map-getter';
 import {
 	evaluationString,
 	isErrorLike,
@@ -75,7 +77,6 @@ const shouldHideWarning = (log: ConsoleMessage) => {
 };
 
 export const enum PageEmittedEvents {
-	Console = 'console',
 	Error = 'error',
 	Disposed = 'disposed',
 }
@@ -96,6 +97,8 @@ export class Page extends EventEmitter {
 		sourceMapGetter,
 		logLevel,
 		indent,
+		pageIndex,
+		onBrowserLog,
 	}: {
 		client: CDPSession;
 		target: Target;
@@ -104,6 +107,8 @@ export class Page extends EventEmitter {
 		sourceMapGetter: SourceMapGetter;
 		logLevel: LogLevel;
 		indent: boolean;
+		pageIndex: number;
+		onBrowserLog: null | ((log: BrowserLog) => void);
 	}): Promise<Page> {
 		const page = new Page({
 			client,
@@ -112,6 +117,8 @@ export class Page extends EventEmitter {
 			sourceMapGetter,
 			logLevel,
 			indent,
+			pageIndex,
+			onBrowserLog,
 		});
 		await page.#initialize();
 		await page.setViewport(defaultViewport);
@@ -129,6 +136,9 @@ export class Page extends EventEmitter {
 	screenshotTaskQueue: TaskQueue;
 	sourceMapGetter: SourceMapGetter;
 	logLevel: LogLevel;
+	indent: boolean;
+	pageIndex: number;
+	onBrowserLog: null | ((log: BrowserLog) => void);
 
 	constructor({
 		client,
@@ -137,6 +147,8 @@ export class Page extends EventEmitter {
 		sourceMapGetter,
 		logLevel,
 		indent,
+		pageIndex,
+		onBrowserLog,
 	}: {
 		client: CDPSession;
 		target: Target;
@@ -144,6 +156,8 @@ export class Page extends EventEmitter {
 		sourceMapGetter: SourceMapGetter;
 		logLevel: LogLevel;
 		indent: boolean;
+		pageIndex: number;
+		onBrowserLog: null | ((log: BrowserLog) => void);
 	}) {
 		super();
 		this.#client = client;
@@ -154,6 +168,9 @@ export class Page extends EventEmitter {
 		this.id = String(Math.random());
 		this.sourceMapGetter = sourceMapGetter;
 		this.logLevel = logLevel;
+		this.indent = indent;
+		this.pageIndex = pageIndex;
+		this.onBrowserLog = onBrowserLog;
 
 		client.on('Target.attachedToTarget', (event: AttachedToTargetEvent) => {
 			switch (event.targetInfo.type) {
@@ -172,7 +189,7 @@ export class Page extends EventEmitter {
 						.send('Target.detachFromTarget', {
 							sessionId: event.sessionId,
 						})
-						.catch((err) => console.log(err));
+						.catch((err) => Log.error({indent, logLevel}, err));
 			}
 		});
 
@@ -188,66 +205,71 @@ export class Page extends EventEmitter {
 		client.on('Log.entryAdded', (event) => {
 			return this.#onLogEntryAdded(event);
 		});
-
-		this.on('console', (log) => {
-			const {url, columnNumber, lineNumber} = log.location();
-
-			if (shouldHideWarning(log)) {
-				return;
-			}
-
-			if (
-				url?.endsWith(NoReactInternals.bundleName) &&
-				lineNumber &&
-				this.sourceMapGetter()
-			) {
-				const origPosition = this.sourceMapGetter()?.originalPositionFor({
-					column: columnNumber ?? 0,
-					line: lineNumber,
-				});
-				const file = [
-					origPosition?.source,
-					origPosition?.line,
-					origPosition?.column,
-				]
-					.filter(truthy)
-					.join(':');
-
-				const tag = [origPosition?.name, file].filter(truthy).join('@');
-
-				if (log.type === 'error') {
-					Log.errorAdvanced(
-						{
-							logLevel,
-							tag,
-							indent,
-						},
-						log.previewString,
-					);
-				} else {
-					Log.verbose(
-						{
-							logLevel,
-							tag,
-							indent,
-						},
-						log.previewString,
-					);
-				}
-			} else if (log.type === 'error') {
-				if (log.text.includes('Failed to load resource:')) {
-					Log.errorAdvanced({logLevel, tag: url, indent}, log.text);
-				} else {
-					Log.errorAdvanced(
-						{logLevel, tag: `console.${log.type}`, indent},
-						log.text,
-					);
-				}
-			} else {
-				Log.verbose({logLevel, tag: `console.${log.type}`, indent}, log.text);
-			}
-		});
 	}
+
+	#onConsole = (log: ConsoleMessage) => {
+		const {url, columnNumber, lineNumber} = log.location();
+		const logLevel = this.logLevel;
+		const indent = this.indent;
+
+		if (shouldHideWarning(log)) {
+			return;
+		}
+
+		this.onBrowserLog?.({
+			stackTrace: log.stackTrace(),
+			text: log.text,
+			type: log.type,
+		});
+
+		if (
+			url?.endsWith(NoReactInternals.bundleName) &&
+			lineNumber &&
+			this.sourceMapGetter()
+		) {
+			const origPosition = this.sourceMapGetter()?.originalPositionFor({
+				column: columnNumber ?? 0,
+				line: lineNumber,
+			});
+			const file = [
+				origPosition?.source,
+				origPosition?.line,
+				origPosition?.column,
+			]
+				.filter(truthy)
+				.join(':');
+
+			const tag = [origPosition?.name, file].filter(truthy).join('@');
+
+			if (log.type === 'error') {
+				Log.error(
+					{
+						logLevel,
+						tag,
+						indent,
+					},
+					log.previewString,
+				);
+			} else {
+				Log.verbose(
+					{
+						logLevel,
+						tag,
+						indent,
+					},
+					log.previewString,
+				);
+			}
+		} else if (log.type === 'error') {
+			if (log.text.includes('Failed to load resource:')) {
+				Log.error({logLevel, tag: url, indent}, log.text);
+			} else {
+				Log.error({logLevel, tag: `console.${log.type}`, indent}, log.text);
+			}
+		} else {
+			Log.verbose({logLevel, tag: `console.${log.type}`, indent}, log.text);
+		}
+	};
 
 	async #initialize(): Promise<void> {
 		await Promise.all([
@@ -323,16 +345,19 @@ export class Page extends EventEmitter {
 			: '';
 
 		if (source !== 'worker') {
-			this.emit(
-				PageEmittedEvents.Console,
-				new ConsoleMessage({
-					type: level,
-					text,
-					args: [],
-					stackTraceLocations: [{url, lineNumber}],
-					previewString,
-				}),
-			);
+			const message = new ConsoleMessage({
+				type: level,
+				text,
+				args: [],
+				stackTraceLocations: [{url, lineNumber}],
+				previewString,
+			});
+			this.onBrowserLog?.({
+				stackTrace: message.stackTrace(),
+				text: message.text,
+				type: message.type,
+			});
+			this.#onConsole(message);
 		}
 	}
 
@@ -346,18 +371,39 @@ export class Page extends EventEmitter {
 	}
 
 	async setViewport(viewport: Viewport): Promise<void> {
+		const fromSurface = !process.env.DISABLE_FROM_SURFACE;
+
+		const request: SetDeviceMetricsOverrideRequest = fromSurface
+			? {
+					mobile: false,
+					width: viewport.width,
+					height: viewport.height,
+					deviceScaleFactor: viewport.deviceScaleFactor,
+					screenOrientation: {
+						angle: 0,
+						type: 'portraitPrimary',
+					},
+				}
+			: {
+					mobile: false,
+					width: viewport.width,
+					height: viewport.height,
+					deviceScaleFactor: 1,
+					screenHeight: viewport.height,
+					screenWidth: viewport.width,
+					scale: viewport.deviceScaleFactor,
+					viewport: {
+						height: viewport.height * viewport.deviceScaleFactor,
+						width: viewport.width * viewport.deviceScaleFactor,
+						scale: 1,
+						x: 0,
+						y: 0,
+					},
+				};
+
 		const {value} = await this.#client.send(
 			'Emulation.setDeviceMetricsOverride',
-			{
-				mobile: false,
-				width: viewport.width,
-				height: viewport.height,
-				deviceScaleFactor: viewport.deviceScaleFactor,
-				screenOrientation: {
-					angle: 0,
-					type: 'portraitPrimary',
-				},
-			},
+			request,
 		);
 		return value;
 	}
@@ -438,13 +484,6 @@ export class Page extends EventEmitter {
 		args: JSHandle[],
 		stackTrace?: StackTrace,
 	): void {
-		if (!this.listenerCount(PageEmittedEvents.Console)) {
-			args.forEach((arg) => {
-				return arg.dispose();
-			});
-			return;
-		}
-
 		const textTokens = [];
 		for (const arg of args) {
 			const remoteObject = arg._remoteObject;
@@ -478,7 +517,7 @@ export class Page extends EventEmitter {
 			stackTraceLocations,
 			previewString,
 		});
-		this.emit(PageEmittedEvents.Console, message);
+		this.#onConsole(message);
 	}
 
 	url(): string {

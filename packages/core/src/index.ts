@@ -1,3 +1,4 @@
+import './_check-rsc.js';
 import './asset-types.js';
 import {Clipper} from './Clipper.js';
 import type {Codec} from './codec.js';
@@ -5,8 +6,8 @@ import type {TRenderAsset} from './CompositionManager.js';
 import {addSequenceStackTraces} from './enable-sequence-stack-traces.js';
 import type {StaticFile} from './get-static-files.js';
 import {useIsPlayer} from './is-player.js';
+import type {LogLevel} from './log.js';
 import {checkMultipleRemotionVersions} from './multiple-versions-warning.js';
-import type {ClipRegion} from './NativeLayers.js';
 import {Null} from './Null.js';
 import {Sequence} from './Sequence.js';
 import type {VideoConfig} from './video-config.js';
@@ -23,7 +24,10 @@ declare global {
 	interface Window {
 		remotion_renderReady: boolean;
 		remotion_delayRenderTimeouts: {
-			[key: string]: {label: string | null; timeout: number | NodeJS.Timeout};
+			[key: string]: {
+				label: string | null;
+				timeout: number | Timer;
+			};
 		};
 		remotion_cancelledError: string | undefined;
 		remotion_getCompositionNames: () => string[];
@@ -34,13 +38,21 @@ declare global {
 		remotion_setBundleMode: (bundleMode: BundleState) => void;
 		remotion_staticBase: string;
 		remotion_staticFiles: StaticFile[];
+		remotion_publicPath: string;
 		remotion_publicFolderExists: string | null;
 		remotion_editorName: string | null;
+		remotion_ignoreFastRefreshUpdate: number | null;
 		remotion_numberOfAudioTags: number;
+		remotion_logLevel: LogLevel;
 		remotion_projectName: string;
 		remotion_cwd: string;
 		remotion_studioServerCommand: string;
-		remotion_setFrame: (frame: number, composition: string) => void;
+		remotion_setFrame: (
+			frame: number,
+			composition: string,
+			attempt: number,
+		) => void;
+		remotion_attempt: number;
 		remotion_initialFrame: number;
 		remotion_proxyPort: number;
 		remotion_audioEnabled: boolean;
@@ -49,12 +61,12 @@ declare global {
 		remotion_inputProps: string;
 		remotion_envVariables: string;
 		remotion_collectAssets: () => TRenderAsset[];
-		remotion_getClipRegion: () => ClipRegion | null;
 		remotion_isPlayer: boolean;
 		remotion_isStudio: boolean;
+		remotion_isReadOnlyStudio: boolean;
 		remotion_isBuilding: undefined | (() => void);
 		remotion_finishedBuilding: undefined | (() => void);
-		siteVersion: '10';
+		siteVersion: '11';
 		remotion_version: string;
 		remotion_imported: string | boolean;
 		remotion_unsavedProps: boolean | undefined;
@@ -77,10 +89,13 @@ export type BundleState =
 			compositionWidth: number;
 			compositionFps: number;
 			compositionDefaultCodec: Codec;
+			compositionDefaultOutName: string | null;
 	  };
 
 checkMultipleRemotionVersions();
 export * from './AbsoluteFill.js';
+export * from './animated-image/index.js';
+export {Artifact} from './Artifact.js';
 export * from './audio/index.js';
 export {cancelRender} from './cancel-render.js';
 export {
@@ -93,6 +108,7 @@ export {
 export {
 	AnyCompMetadata,
 	AnyComposition,
+	AudioOrVideoAsset,
 	SmallTCompMetadata,
 	TCompMetadata,
 	TRenderAsset,
@@ -109,8 +125,8 @@ export * from './IFrame.js';
 export {Img, ImgProps} from './Img.js';
 export * from './internals.js';
 export {interpolateColors} from './interpolate-colors.js';
+export {LogLevel} from './log.js';
 export {Loop} from './loop/index.js';
-export {ClipRegion} from './NativeLayers.js';
 export {
 	EasingFunction,
 	ExtrapolateType,
@@ -122,6 +138,7 @@ export {
 export {prefetch, PrefetchOnProgress} from './prefetch.js';
 export {registerRoot} from './register-root.js';
 export {
+	AbsoluteFillLayout,
 	LayoutAndStyle,
 	Sequence,
 	SequenceProps,
@@ -132,7 +149,15 @@ export * from './spring/index.js';
 export {staticFile} from './static-file.js';
 export * from './Still.js';
 export type {PlayableMediaTag} from './timeline-position-state.js';
+export {useBufferState} from './use-buffer-state';
 export {useCurrentFrame} from './use-current-frame.js';
+export {
+	CurrentScaleContextType,
+	PreviewSize,
+	PreviewSizeCtx,
+	Translation,
+	useCurrentScale,
+} from './use-current-scale';
 export * from './use-video-config.js';
 export * from './version.js';
 export * from './video-config.js';

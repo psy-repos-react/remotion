@@ -4,6 +4,7 @@ import type {
 	Browser,
 	BrowserExecutable,
 	CancelSignal,
+	ChromeMode,
 	ChromiumOptions,
 	LogLevel,
 	RenderMediaOnDownload,
@@ -13,24 +14,28 @@ import {RenderInternals} from '@remotion/renderer';
 import type {
 	AggregateRenderProgress,
 	JobProgressCallback,
-	RenderStep,
 } from '@remotion/studio-server';
 import {existsSync, mkdirSync} from 'node:fs';
 import path from 'node:path';
 import {NoReactInternals} from 'remotion/no-react';
+import {defaultBrowserDownloadProgress} from '../browser-download-bar';
 import {chalk} from '../chalk';
 import {registerCleanupJob} from '../cleanup-before-quit';
 import {ConfigInternals} from '../config';
 import {determineFinalStillImageFormat} from '../determine-image-format';
 import {getAndValidateAbsoluteOutputFile} from '../get-cli-options';
 import {getCompositionWithDimensionOverride} from '../get-composition-with-dimension-override';
+import {makeHyperlink} from '../hyperlinks/make-link';
 import {Log} from '../log';
 import {makeOnDownload} from '../make-on-download';
-import {parsedCli, quietFlagProvided} from '../parse-command-line';
+import {handleOnArtifact} from '../on-artifact';
+import {parsedCli, quietFlagProvided} from '../parsed-cli';
 import type {OverwriteableCliOutput} from '../progress-bar';
 import {
+	LABEL_WIDTH,
 	createOverwriteableCliOutput,
 	makeRenderingAndStitchingProgress,
+	printFact,
 } from '../progress-bar';
 import {initialAggregateRenderProgress} from '../progress-types';
 import {bundleOnCliOrTakeServeUrl} from '../setup-cache';
@@ -69,11 +74,15 @@ export const renderStillFlow = async ({
 	cancelSignal,
 	outputLocationFromUi,
 	offthreadVideoCacheSizeInBytes,
+	binariesDirectory,
+	publicPath,
+	chromeMode,
+	offthreadVideoThreads,
 }: {
 	remotionRoot: string;
 	fullEntryPoint: string;
 	entryPointReason: string;
-	remainingArgs: string[];
+	remainingArgs: (string | number)[];
 	serializedInputPropsWithCustomSchema: string;
 	envVariables: Record<string, string>;
 	jpegQuality: number;
@@ -93,11 +102,21 @@ export const renderStillFlow = async ({
 	logLevel: LogLevel;
 	onProgress: JobProgressCallback;
 	indent: boolean;
-	addCleanupCallback: (cb: () => void) => void;
+	addCleanupCallback: (label: string, cb: () => void) => void;
 	cancelSignal: CancelSignal | null;
 	outputLocationFromUi: string | null;
 	offthreadVideoCacheSizeInBytes: number | null;
+	offthreadVideoThreads: number | null;
+	binariesDirectory: string | null;
+	publicPath: string | null;
+	chromeMode: ChromeMode;
 }) => {
+	const isVerbose = RenderInternals.isEqualOrBelowLogLevel(logLevel, 'verbose');
+	Log.verbose(
+		{indent, logLevel},
+		chalk.gray(`Entry point = ${fullEntryPoint} (${entryPointReason})`),
+	);
+
 	const aggregate: AggregateRenderProgress = initialAggregateRenderProgress();
 	const updatesDontOverwrite = shouldUseNonOverlayingLogger({logLevel});
 
@@ -108,25 +127,16 @@ export const renderStillFlow = async ({
 		indent,
 	});
 
-	const steps: RenderStep[] = [
-		RenderInternals.isServeUrl(fullEntryPoint) ? null : ('bundling' as const),
-		'rendering' as const,
-	].filter(truthy);
-
 	const updateRenderProgress = ({
 		newline,
 		printToConsole,
-		isUsingParallelEncoding,
 	}: {
 		newline: boolean;
 		printToConsole: boolean;
-		isUsingParallelEncoding: boolean;
 	}) => {
 		const {output, progress, message} = makeRenderingAndStitchingProgress({
 			prog: aggregate,
-			steps: steps.length,
-			stitchingStep: steps.indexOf('stitching'),
-			isUsingParallelEncoding,
+			isUsingParallelEncoding: false,
 		});
 		if (printToConsole) {
 			renderProgress.update(updatesDontOverwrite ? message : output, newline);
@@ -134,6 +144,20 @@ export const renderStillFlow = async ({
 
 		onProgress({message, value: progress, ...aggregate});
 	};
+
+	const onBrowserDownload = defaultBrowserDownloadProgress({
+		quiet: quietFlagProvided(),
+		indent,
+		logLevel,
+	});
+
+	await RenderInternals.internalEnsureBrowser({
+		browserExecutable,
+		indent,
+		logLevel,
+		onBrowserDownload,
+		chromeMode,
+	});
 
 	const browserInstance = RenderInternals.internalOpenBrowser({
 		browser,
@@ -143,13 +167,14 @@ export const renderStillFlow = async ({
 		indent,
 		viewport: null,
 		logLevel,
+		onBrowserDownload,
+		chromeMode,
 	});
 
 	const {cleanup: cleanupBundle, urlOrBundle} = await bundleOnCliOrTakeServeUrl(
 		{
 			fullPath: fullEntryPoint,
 			remotionRoot,
-			steps: steps.length,
 			publicDir,
 			onProgress: ({copying, bundling}) => {
 				aggregate.bundling = bundling;
@@ -157,14 +182,12 @@ export const renderStillFlow = async ({
 				updateRenderProgress({
 					newline: false,
 					printToConsole: true,
-					isUsingParallelEncoding: false,
 				});
 			},
 			indentOutput: indent,
 			logLevel,
-			bundlingStep: steps.indexOf('bundling'),
 			onDirectoryCreated: (dir) => {
-				registerCleanupJob(() => {
+				registerCleanupJob(`Delete ${dir}`, () => {
 					RenderInternals.deleteDirectory(dir);
 				});
 			},
@@ -173,25 +196,34 @@ export const renderStillFlow = async ({
 			outDir: null,
 			// Not needed for still
 			gitSource: null,
+			bufferStateDelayInMilliseconds: null,
+			maxTimelineTracks: null,
+			publicPath,
 		},
 	);
 
 	const server = await RenderInternals.prepareServer({
-		concurrency: 1,
+		offthreadVideoThreads:
+			offthreadVideoThreads ??
+			RenderInternals.DEFAULT_RENDER_FRAMES_OFFTHREAD_VIDEO_THREADS,
 		indent,
 		port,
 		remotionRoot,
 		logLevel,
 		webpackConfigOrServeUrl: urlOrBundle,
 		offthreadVideoCacheSizeInBytes,
+		binariesDirectory,
+		forceIPv4: false,
 	});
 
-	addCleanupCallback(() => server.closeServer(false));
+	addCleanupCallback(`Close server`, () => server.closeServer(false));
 
-	addCleanupCallback(() => cleanupBundle());
+	addCleanupCallback(`Cleanup bundle`, () => cleanupBundle());
 
 	const puppeteerInstance = await browserInstance;
-	addCleanupCallback(() => puppeteerInstance.close(false, logLevel, indent));
+	addCleanupCallback(`Close browser`, () =>
+		puppeteerInstance.close({silent: false}),
+	);
 
 	const {compositionId, config, reason, argsAfterComposition} =
 		await getCompositionWithDimensionOverride({
@@ -211,6 +243,10 @@ export const renderStillFlow = async ({
 			logLevel,
 			server,
 			offthreadVideoCacheSizeInBytes,
+			offthreadVideoThreads,
+			binariesDirectory,
+			onBrowserDownload,
+			chromeMode,
 		});
 
 	const {format: imageFormat, source} = determineFinalStillImageFormat({
@@ -232,11 +268,13 @@ export const renderStillFlow = async ({
 		args: argsAfterComposition,
 		type: 'asset',
 		outputLocationFromUi,
+		compositionDefaultOutName: config.defaultOutName,
 	});
 
 	const absoluteOutputLocation = getAndValidateAbsoluteOutputFile(
 		relativeOutputLocation,
 		overwrite,
+		logLevel,
 	);
 	const exists = existsSync(absoluteOutputLocation);
 
@@ -244,31 +282,45 @@ export const renderStillFlow = async ({
 		recursive: true,
 	});
 
-	Log.verbose(
-		{indent, logLevel},
-		chalk.gray(`Entry point = ${fullEntryPoint} (${entryPointReason})`),
-	);
-	Log.infoAdvanced(
-		{indent, logLevel},
-		chalk.gray(
-			`Composition = ${compositionId} (${reason}), Format = ${imageFormat} (${source}), Output = ${relativeOutputLocation}`,
-		),
-	);
+	printFact('info')({
+		indent,
+		left: 'Composition',
+		link: 'https://remotion.dev/docs/terminology/composition',
+		logLevel,
+		right: [compositionId, isVerbose ? `(${reason})` : null]
+			.filter(truthy)
+			.join(' '),
+		color: 'gray',
+	});
+	printFact('info')({
+		indent,
+		left: 'Format',
+		logLevel,
+		right: [imageFormat, isVerbose ? `(${source})` : null]
+			.filter(truthy)
+			.join(' '),
+		color: 'gray',
+	});
+	printFact('info')({
+		indent,
+		left: 'Output',
+		logLevel,
+		right: relativeOutputLocation,
+		color: 'gray',
+	});
 
 	const renderStart = Date.now();
 
 	aggregate.rendering = {
 		frames: 0,
-		concurrency: 1,
 		doneIn: null,
-		steps,
 		totalFrames: 1,
+		timeRemainingInMilliseconds: null,
 	};
 
 	updateRenderProgress({
 		newline: false,
 		printToConsole: true,
-		isUsingParallelEncoding: false,
 	});
 
 	const onDownload: RenderMediaOnDownload = makeOnDownload({
@@ -278,6 +330,19 @@ export const renderStillFlow = async ({
 		updateRenderProgress,
 		updatesDontOverwrite,
 		isUsingParallelEncoding: false,
+	});
+
+	const {onArtifact} = handleOnArtifact({
+		artifactState: aggregate.artifactState,
+		compositionId,
+		onProgress: (progress) => {
+			aggregate.artifactState = progress;
+
+			updateRenderProgress({
+				newline: false,
+				printToConsole: true,
+			});
+		},
 	});
 
 	await RenderInternals.internalRenderStill({
@@ -297,7 +362,7 @@ export const renderStillFlow = async ({
 		onDownload,
 		port,
 		puppeteerInstance,
-		server: await server,
+		server,
 		cancelSignal,
 		indent,
 		onBrowserLog: null,
@@ -309,22 +374,27 @@ export const renderStillFlow = async ({
 				data: config.props,
 			}).serializedString,
 		offthreadVideoCacheSizeInBytes,
+		binariesDirectory,
+		onBrowserDownload,
+		onArtifact,
+		chromeMode,
+		offthreadVideoThreads,
 	});
 
 	aggregate.rendering = {
 		frames: 1,
-		concurrency: 1,
 		doneIn: Date.now() - renderStart,
-		steps,
 		totalFrames: 1,
+		timeRemainingInMilliseconds: null,
 	};
 	updateRenderProgress({
 		newline: true,
 		printToConsole: true,
-		isUsingParallelEncoding: false,
 	});
-	Log.infoAdvanced(
+	Log.info(
 		{indent, logLevel},
-		chalk.blue(`${exists ? '○' : '+'} ${absoluteOutputLocation}`),
+		chalk.blue(
+			`${(exists ? '○' : '+').padEnd(LABEL_WIDTH)} ${makeHyperlink({url: 'file://' + absoluteOutputLocation, text: relativeOutputLocation, fallback: relativeOutputLocation})}`,
+		),
 	);
 };

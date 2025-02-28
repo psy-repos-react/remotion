@@ -11,6 +11,7 @@ import {getBundleMapUrlFromServeUrl} from './get-bundle-url-from-serve-url';
 import {isServeUrl} from './is-serve-url';
 import type {LogLevel} from './log-level';
 import {Log} from './logger';
+import {normalizeServeUrl} from './normalize-serve-url';
 import {serveStatic} from './serve-static';
 import type {AnySourceMapConsumer} from './symbolicate-stacktrace';
 import {
@@ -32,20 +33,24 @@ type PrepareServerOptions = {
 	webpackConfigOrServeUrl: string;
 	port: number | null;
 	remotionRoot: string;
-	concurrency: number;
+	offthreadVideoThreads: number;
 	logLevel: LogLevel;
 	indent: boolean;
 	offthreadVideoCacheSizeInBytes: number | null;
+	binariesDirectory: string | null;
+	forceIPv4: boolean;
 };
 
 export const prepareServer = async ({
 	webpackConfigOrServeUrl,
 	port,
 	remotionRoot,
-	concurrency,
+	offthreadVideoThreads,
 	logLevel,
 	indent,
 	offthreadVideoCacheSizeInBytes,
+	binariesDirectory,
+	forceIPv4,
 }: PrepareServerOptions): Promise<RemotionServer> => {
 	const downloadMap = makeDownloadMap();
 	Log.verbose(
@@ -63,17 +68,19 @@ export const prepareServer = async ({
 			port,
 			downloadMap,
 			remotionRoot,
-			concurrency,
+			offthreadVideoThreads,
 			logLevel,
 			indent,
 			offthreadVideoCacheSizeInBytes,
+			binariesDirectory,
+			forceIPv4,
 		});
+
+		const normalized = normalizeServeUrl(webpackConfigOrServeUrl);
 
 		let remoteSourceMap: AnySourceMapConsumer | null = null;
 
-		getSourceMapFromRemoteUrl(
-			getBundleMapUrlFromServeUrl(webpackConfigOrServeUrl),
-		)
+		getSourceMapFromRemoteUrl(getBundleMapUrlFromServeUrl(normalized))
 			.then((s) => {
 				remoteSourceMap = s;
 			})
@@ -81,13 +88,13 @@ export const prepareServer = async ({
 				Log.verbose(
 					{indent, logLevel},
 					'Could not fetch sourcemap for ',
-					webpackConfigOrServeUrl,
+					normalized,
 					err,
 				);
 			});
 
 		return Promise.resolve({
-			serveUrl: webpackConfigOrServeUrl,
+			serveUrl: normalized,
 			closeServer: () => {
 				cleanDownloadMap(downloadMap);
 				remoteSourceMap?.destroy();
@@ -135,10 +142,12 @@ export const prepareServer = async ({
 		port,
 		downloadMap,
 		remotionRoot,
-		concurrency,
+		offthreadVideoThreads,
 		logLevel,
 		indent,
 		offthreadVideoCacheSizeInBytes,
+		binariesDirectory,
+		forceIPv4,
 	});
 
 	return Promise.resolve({
@@ -152,6 +161,8 @@ export const prepareServer = async ({
 
 			return close();
 		},
+		// This should be kept localhost, even if the server is bound to ::1,
+		// to prevent "Failed to load resource: net::ERR_FAILED  Access to image at 'http://localhost:3000/proxy?src=http%3A%2F%2F%5B%3A%3A%5D%3A3000%2Fpublic%2Fframer.webm&time=0&transparent=false' from origin 'http://[::]:3000' has been blocked by CORS policy: The request client is not a secure context and the resource is in more-private address space `local`".
 		serveUrl: `http://localhost:${serverPort}`,
 		offthreadPort: serverPort,
 		compositor,
@@ -165,9 +176,7 @@ export const makeOrReuseServer = async (
 	config: PrepareServerOptions,
 	{
 		onDownload,
-		onError,
 	}: {
-		onError: (err: Error) => void;
 		onDownload: RenderMediaOnDownload | null;
 	},
 ): Promise<{
@@ -180,18 +189,10 @@ export const makeOrReuseServer = async (
 			onDownload,
 		);
 
-		const cleanupError = server.downloadMap.emitter.addEventListener(
-			'error',
-			({detail: {error}}) => {
-				onError(error);
-			},
-		);
-
 		return {
 			server,
 			cleanupServer: () => {
 				cleanupOnDownload();
-				cleanupError();
 				return Promise.resolve();
 			},
 		};
@@ -204,18 +205,10 @@ export const makeOrReuseServer = async (
 		onDownload,
 	);
 
-	const cleanupErrorNew = newServer.downloadMap.emitter.addEventListener(
-		'error',
-		({detail: {error}}) => {
-			onError(error);
-		},
-	);
-
 	return {
 		server: newServer,
 		cleanupServer: (force: boolean) => {
 			cleanupOnDownloadNew();
-			cleanupErrorNew();
 			return Promise.all([newServer.closeServer(force)]);
 		},
 	};

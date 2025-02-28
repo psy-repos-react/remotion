@@ -2,22 +2,28 @@ import type {ChangeEvent} from 'react';
 import React, {useCallback} from 'react';
 import {Checkbox} from '../Checkbox';
 import {Spacing} from '../layout';
-import {label, optionRow, rightRow} from './layout';
 import {NumberOfLoopsSetting} from './NumberOfLoopsSetting';
 import {NumberSetting} from './NumberSetting';
 import {OptionExplainerBubble} from './OptionExplainerBubble';
+import {label, optionRow, rightRow} from './layout';
 
 const container: React.CSSProperties = {
 	flex: 1,
 };
 
 export const RenderModalGif: React.FC<{
-	limitNumberOfGifLoops: boolean;
-	setLimitNumberOfGifLoops: (value: React.SetStateAction<boolean>) => void;
-	numberOfGifLoopsSetting: number;
-	setNumberOfGifLoopsSetting: React.Dispatch<React.SetStateAction<number>>;
-	everyNthFrame: number;
-	setEveryNthFrameSetting: React.Dispatch<React.SetStateAction<number>>;
+	readonly limitNumberOfGifLoops: boolean;
+	readonly setLimitNumberOfGifLoops: (
+		value: React.SetStateAction<boolean>,
+	) => void;
+	readonly numberOfGifLoopsSetting: number;
+	readonly setNumberOfGifLoopsSetting: React.Dispatch<
+		React.SetStateAction<number>
+	>;
+	readonly everyNthFrame: number;
+	readonly setEveryNthFrameSetting: React.Dispatch<
+		React.SetStateAction<number>
+	>;
 }> = ({
 	everyNthFrame,
 	limitNumberOfGifLoops,

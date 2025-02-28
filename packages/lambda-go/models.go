@@ -11,6 +11,7 @@ type RemotionOptions struct {
 	ImageFormat                    string                 `json:"imageFormat"`
 	Crf                            int                    `json:"crf"`
 	EnvVariables                   interface{}            `json:"envVariables"`
+	Metadata                       interface{}            `json:"metadata"`
 	JpegQuality                    int                    `json:"jpegQuality"`
 	MaxRetries                     int                    `json:"maxRetries"`
 	Privacy                        string                 `json:"privacy"`
@@ -26,7 +27,9 @@ type RemotionOptions struct {
 	ConcurrencyPerLambda           int                    `json:"concurrencyPerLambda"`
 	DownloadBehavior               map[string]interface{} `json:"downloadBehavior"`
 	Muted                          bool                   `json:"muted"`
+	PreferLossless                 bool                   `json:"preferLossless"`
 	Overwrite                      bool                   `json:"overwrite"`
+	ForcePathStyle                 bool                   `json:"forcePathStyle"`
 	AudioBitrate                   interface{}            `json:"audioBitrate"`
 	VideoBitrate                   interface{}            `json:"videoBitrate"`
 	EncodingBufferSize             interface{}            `json:"encodingBufferSize"`
@@ -34,7 +37,9 @@ type RemotionOptions struct {
 	Webhook                        interface{}            `json:"webhook"`
 	ForceHeight                    interface{}            `json:"forceHeight"`
 	OffthreadVideoCacheSizeInBytes interface{}            `json:"offthreadVideoCacheSizeInBytes"`
+	OffthreadVideoThreads          interface{}            `json:"offthreadVideoThreads"`
 	ForceWidth                     interface{}            `json:"forceWidth"`
+	ApiKey                         interface{}            `json:"apiKey"`
 	BucketName                     interface{}            `json:"bucketName"`
 	AudioCodec                     interface{}            `json:"audioCodec"`
 	ForceBucketName                string                 `json:"forceBucketName"`
@@ -51,13 +56,16 @@ type renderInternalOptions struct {
 	InputProps                     interface{}            `json:"inputProps"`
 	Type                           string                 `json:"type,omitempty"`
 	Codec                          string                 `json:"codec"`
+	ProResProfile                  interface{}            `json:"proResProfile"`
+	PixelFormat                    interface{}            `json:"pixelFormat"`
 	ImageFormat                    string                 `json:"imageFormat"`
-	Crf                            int                    `json:"crf,omitempty"`
+	Crf                            interface{}            `json:"crf"`
 	EnvVariables                   interface{}            `json:"envVariables,omitempty"`
+	Metadata                       interface{}            `json:"metadata,omitempty"`
 	JpegQuality                    int                    `json:"jpegQuality"`
 	MaxRetries                     int                    `json:"maxRetries"`
 	Privacy                        string                 `json:"privacy"`
-	ColorSpace                     string                 `json:"colorSpace"`
+	ColorSpace                     interface{}            `json:"colorSpace"`
 	LogLevel                       string                 `json:"logLevel"`
 	FrameRange                     interface{}            `json:"frameRange"`
 	OutName                        interface{}            `json:"outName"`
@@ -69,6 +77,8 @@ type renderInternalOptions struct {
 	ConcurrencyPerLambda           int                    `json:"concurrencyPerLambda"`
 	DownloadBehavior               map[string]interface{} `json:"downloadBehavior"`
 	Muted                          bool                   `json:"muted"`
+	PreferLossless                 bool                   `json:"preferLossless"`
+	ForcePathStyle                 bool                   `json:"forcePathStyle"`
 	Version                        string                 `json:"version"`
 	Overwrite                      bool                   `json:"overwrite"`
 	AudioBitrate                   interface{}            `json:"audioBitrate"`
@@ -77,8 +87,10 @@ type renderInternalOptions struct {
 	EncodingMaxRate                interface{}            `json:"encodingMaxRate"`
 	Webhook                        interface{}            `json:"webhook"`
 	OffthreadVideoCacheSizeInBytes interface{}            `json:"offthreadVideoCacheSizeInBytes"`
+	OffthreadVideoThreads          interface{}            `json:"offthreadVideoThreads"`
 	ForceHeight                    interface{}            `json:"forceHeight"`
 	ForceWidth                     interface{}            `json:"forceWidth"`
+	ApiKey                         interface{}            `json:"apiKey"`
 	BucketName                     interface{}            `json:"bucketName"`
 	AudioCodec                     interface{}            `json:"audioCodec"`
 
@@ -89,11 +101,8 @@ type renderInternalOptions struct {
 }
 
 type RawInvokeResponse struct {
-	StatusCode int `json:"statusCode"`
-	Headers    struct {
-		ContentType string `json:"content-type"`
-	} `json:"headers"`
 	Body string `json:"body"`
+	Type string `json:"type"`
 }
 
 type RemotionRenderResponse struct {
@@ -102,11 +111,14 @@ type RemotionRenderResponse struct {
 }
 
 type RenderConfig struct {
-	RenderId     string  `json:"renderId" validate:"required"`
-	BucketName   string  `json:"bucketName" validate:"required"`
-	FunctionName string  `json:"functionName" validate:"required"`
-	Region       string  `json:"region" validate:"required"`
-	DeleteAfter  *string `json:"deleteAfter"`
+	RenderId         string      `json:"renderId" validate:"required"`
+	BucketName       string      `json:"bucketName" validate:"required"`
+	LogLevel         string      `json:"logLevel"`
+	FunctionName     string      `json:"functionName" validate:"required"`
+	Region           string      `json:"region" validate:"required"`
+	DeleteAfter      *string     `json:"deleteAfter"`
+	S3OutputProvider interface{} `json:"s3OutputProvider"`
+	ForcePathStyle   bool        `json:"forcePathStyle"`
 }
 
 type renderProgressInternalConfig struct {
@@ -114,6 +126,7 @@ type renderProgressInternalConfig struct {
 	BucketName string `json:"bucketName" validate:"required"`
 	Type       string `json:"type" validate:"required"`
 	Version    string `json:"version" validate:"required"`
+	LogLevel   string `json:"logLevel" validate:"required"`
 }
 
 type RenderProgress struct {

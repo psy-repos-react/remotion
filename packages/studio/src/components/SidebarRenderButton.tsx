@@ -13,16 +13,20 @@ import React, {useCallback, useContext, useMemo} from 'react';
 import type {AnyCompMetadata} from 'remotion';
 import {Internals} from 'remotion';
 import {StudioServerConnectionCtx} from '../helpers/client-id';
+import {useMobileLayout} from '../helpers/mobile-layout';
 import {ThinRenderIcon} from '../icons/render';
 import {ModalsContext} from '../state/modals';
+import {SidebarContext} from '../state/sidebar';
 import type {RenderInlineAction} from './InlineAction';
 import {InlineAction} from './InlineAction';
 
 export const SidebarRenderButton: React.FC<{
-	composition: AnyCompMetadata;
-	visible: boolean;
+	readonly composition: AnyCompMetadata;
+	readonly visible: boolean;
 }> = ({composition, visible}) => {
 	const {setSelectedModal} = useContext(ModalsContext);
+	const {setSidebarCollapsedState} = useContext(SidebarContext);
+	const isMobileLayout = useMobileLayout();
 
 	const iconStyle: SVGProps<SVGSVGElement> = useMemo(() => {
 		return {
@@ -73,6 +77,7 @@ export const SidebarRenderButton: React.FC<{
 				initialHeadless: defaults.headless,
 				initialOffthreadVideoCacheSizeInBytes:
 					defaults.offthreadVideoCacheSizeInBytes,
+				initialOffthreadVideoThreads: defaults.offthreadVideoThreads,
 				initialIgnoreCertificateErrors: defaults.ignoreCertificateErrors,
 				defaultProps: props[composition.id] ?? composition.defaultProps,
 				inFrameMark: null,
@@ -85,9 +90,26 @@ export const SidebarRenderButton: React.FC<{
 				initialUserAgent: defaults.userAgent,
 				initialBeep: defaults.beepOnFinish,
 				initialRepro: defaults.repro,
+				initialForSeamlessAacConcatenation:
+					defaults.forSeamlessAacConcatenation,
+				renderTypeOfLastRender: null,
+				defaulMetadata: defaults.metadata,
+				initialHardwareAcceleration: defaults.hardwareAcceleration,
+				initialChromeMode: defaults.chromeMode,
 			});
+
+			if (isMobileLayout) {
+				setSidebarCollapsedState({left: 'collapsed', right: 'collapsed'});
+			}
 		},
-		[composition.defaultProps, composition.id, props, setSelectedModal],
+		[
+			composition.defaultProps,
+			composition.id,
+			isMobileLayout,
+			props,
+			setSelectedModal,
+			setSidebarCollapsedState,
+		],
 	);
 
 	const renderAction: RenderInlineAction = useCallback(

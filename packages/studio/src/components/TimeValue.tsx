@@ -10,8 +10,8 @@ import {LIGHT_TEXT} from '../helpers/colors';
 import {useIsStill} from '../helpers/is-current-selected-still';
 import {useKeybinding} from '../helpers/use-keybinding';
 import {renderFrame} from '../state/render-frame';
-import {Flex, Spacing} from './layout';
 import {InputDragger} from './NewComposition/InputDragger';
+import {Flex, Spacing} from './layout';
 
 const text: React.CSSProperties = {
 	color: 'white',
@@ -22,6 +22,7 @@ const text: React.CSSProperties = {
 	lineHeight: 1,
 	width: '100%',
 	userSelect: 'none',
+	WebkitUserSelect: 'none',
 };
 
 const time: React.CSSProperties = {
@@ -39,10 +40,6 @@ const frameStyle: React.CSSProperties = {
 	fontFamily: 'monospace',
 	paddingRight: 10,
 };
-
-export const timeValueRef = React.createRef<{
-	goToFrame: () => void;
-}>();
 
 export const TimeValue: React.FC = () => {
 	const frame = useCurrentFrame();
@@ -66,13 +63,14 @@ export const TimeValue: React.FC = () => {
 	);
 
 	useImperativeHandle(
-		timeValueRef,
+		Internals.timeValueRef,
 		() => ({
 			goToFrame: () => {
 				ref.current?.click();
 			},
+			seek,
 		}),
-		[],
+		[seek],
 	);
 
 	useEffect(() => {

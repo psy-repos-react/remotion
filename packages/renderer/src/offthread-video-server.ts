@@ -31,10 +31,17 @@ export const extractUrlAndSourceFromUrl = (url: string) => {
 
 	const transparent = params.get('transparent');
 
+	const toneMapped = params.get('toneMapped');
+
+	if (!toneMapped) {
+		throw new Error('Did not get `toneMapped` parameter');
+	}
+
 	return {
 		src,
 		time: parseFloat(time),
 		transparent: transparent === 'true',
+		toneMapped: toneMapped === 'true',
 	};
 };
 
@@ -42,32 +49,35 @@ const REQUEST_CLOSED_TOKEN = 'Request closed';
 
 export const startOffthreadVideoServer = ({
 	downloadMap,
-	concurrency,
 	logLevel,
 	indent,
 	offthreadVideoCacheSizeInBytes,
+	binariesDirectory,
+	offthreadVideoThreads,
 }: {
 	downloadMap: DownloadMap;
 	offthreadVideoCacheSizeInBytes: number | null;
-	concurrency: number;
+	offthreadVideoThreads: number;
 	logLevel: LogLevel;
 	indent: boolean;
+	binariesDirectory: string | null;
 }): {
 	listener: RequestListener;
 	close: () => Promise<void>;
 	compositor: Compositor;
 } => {
 	validateOffthreadVideoCacheSizeInBytes(offthreadVideoCacheSizeInBytes);
-	const compositor = startCompositor(
-		'StartLongRunningProcess',
-		{
-			concurrency,
+	const compositor = startCompositor({
+		type: 'StartLongRunningProcess',
+		payload: {
+			concurrency: offthreadVideoThreads,
 			maximum_frame_cache_size_in_bytes: offthreadVideoCacheSizeInBytes,
 			verbose: isEqualOrBelowLogLevel(logLevel, 'verbose'),
 		},
 		logLevel,
 		indent,
-	);
+		binariesDirectory,
+	});
 
 	return {
 		close: async () => {
@@ -93,13 +103,10 @@ export const startOffthreadVideoServer = ({
 				return;
 			}
 
-			const {src, time, transparent} = extractUrlAndSourceFromUrl(req.url);
+			const {src, time, transparent, toneMapped} = extractUrlAndSourceFromUrl(
+				req.url,
+			);
 			response.setHeader('access-control-allow-origin', '*');
-			if (transparent) {
-				response.setHeader('content-type', `image/png`);
-			} else {
-				response.setHeader('content-type', `image/bmp`);
-			}
 
 			// Prevent caching of the response and excessive disk writes
 			// https://github.com/remotion-dev/remotion/issues/2760
@@ -128,23 +135,33 @@ export const startOffthreadVideoServer = ({
 			});
 
 			let extractStart = Date.now();
-			downloadAsset({src, downloadMap, indent, logLevel})
+			downloadAsset({
+				src,
+				downloadMap,
+				indent,
+				logLevel,
+				binariesDirectory,
+				cancelSignalForAudioAnalysis: undefined,
+				shouldAnalyzeAudioImmediately: true,
+			})
 				.then((to) => {
-					return new Promise<Buffer>((resolve, reject) => {
+					return new Promise<Uint8Array>((resolve, reject) => {
 						if (closed) {
 							reject(Error(REQUEST_CLOSED_TOKEN));
 							return;
 						}
 
 						extractStart = Date.now();
-						resolve(
-							compositor.executeCommand('ExtractFrame', {
+						compositor
+							.executeCommand('ExtractFrame', {
 								src: to,
 								original_src: src,
 								time,
 								transparent,
-							}),
-						);
+								tone_mapped: toneMapped,
+							})
+							.then(resolve)
+							.catch(reject);
 					});
 				})
 				.then((readable) => {
@@ -169,6 +186,27 @@ export const startOffthreadVideoServer = ({
 							);
 						}
 
+						const firstByte = readable.at(0);
+						const secondByte = readable.at(1);
+						const thirdByte = readable.at(2);
+						const isPng =
+							firstByte === 0x89 && secondByte === 0x50 && thirdByte === 0x4e;
+						const isBmp = firstByte === 0x42 && secondByte === 0x4d;
+						if (isPng) {
+							response.setHeader('content-type', `image/png`);
+							response.setHeader('content-length', readable.byteLength);
+						} else if (isBmp) {
+							response.setHeader('content-type', `image/bmp`);
+							response.setHeader('content-length', readable.byteLength);
+						} else {
+							reject(
+								new Error(
+									`Unknown file type: ${firstByte} ${secondByte} ${thirdByte}`,
+								),
+							);
+							return;
+						}
+
 						response.writeHead(200);
 						response.write(readable, (err) => {
 							response.end();
@@ -181,20 +219,17 @@ export const startOffthreadVideoServer = ({
 					});
 				})
 				.catch((err) => {
+					Log.error(
+						{indent, logLevel},
+						'Could not extract frame from compositor',
+						err,
+					);
 					if (!response.headersSent) {
 						response.writeHead(500);
+						response.write(JSON.stringify({error: err.stack}));
 					}
 
 					response.end();
-
-					// Any errors occurred due to the render being aborted don't need to be logged.
-					if (
-						err.message !== REQUEST_CLOSED_TOKEN &&
-						!err.message.includes('EPIPE')
-					) {
-						downloadMap.emitter.dispatchError(err);
-						console.log('Error occurred', err);
-					}
 				});
 		},
 		compositor,
@@ -212,13 +247,8 @@ type ProgressEventPayload = {
 	src: string;
 };
 
-type ErrorEventPayload = {
-	error: Error;
-};
-
 type EventMap = {
 	progress: ProgressEventPayload;
-	error: ErrorEventPayload;
 	download: DownloadEventPayload;
 };
 
@@ -234,7 +264,6 @@ type Listeners = {
 
 export class OffthreadVideoServerEmitter {
 	listeners: Listeners = {
-		error: [],
 		progress: [],
 		download: [],
 	};
@@ -268,12 +297,6 @@ export class OffthreadVideoServerEmitter {
 				callback({detail: context});
 			},
 		);
-	}
-
-	dispatchError(error: Error) {
-		this.dispatchEvent('error', {
-			error,
-		});
 	}
 
 	dispatchDownloadProgress(

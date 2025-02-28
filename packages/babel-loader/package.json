@@ -1,44 +1,39 @@
 {
+	"repository": {
+		"url": "https://github.com/remotion-dev/remotion/tree/main/packages/babel-loader"
+	},
 	"name": "@remotion/babel-loader",
-	"version": "4.0.104",
-	"description": "babel-loader polyfill for Remotion",
+	"version": "4.0.270",
+	"description": "Babel loader for Remotion",
 	"main": "dist/index.js",
 	"scripts": {
 		"formatting": "prettier src --check",
-		"lint": "eslint src --ext ts,tsx",
-		"watch": "tsc -w",
-		"build": "tsc -d"
+		"lint": "eslint src",
+		"make": "tsc -d"
 	},
 	"files": [
 		"dist"
 	],
 	"author": "Jonny Burger <jonny@remotion.dev>",
 	"license": "SEE LICENSE IN LICENSE.md",
-	"repository": {
-		"url": "https://github.com/remotion-dev/remotion"
-	},
 	"bugs": {
 		"url": "https://github.com/remotion-dev/remotion/issues"
 	},
 	"dependencies": {
-		"@babel/core": "7.15.5",
+		"@babel/core": "7.23.2",
 		"@babel/plugin-proposal-class-properties": "7.14.5",
-		"@babel/preset-env": "7.15.6",
+		"@babel/preset-env": "7.23.2",
 		"@babel/preset-react": "7.14.5",
-		"@babel/preset-typescript": "7.15.0",
-		"@webhotelier/webpack-fast-refresh": "5.1.0",
+		"@babel/preset-typescript": "7.23.2",
 		"babel-loader": "8.2.2",
 		"react-refresh": "0.9.0",
-		"webpack": "5.83.1"
+		"webpack": "5.96.1"
 	},
 	"devDependencies": {
-		"@jonny/eslint-config": "3.0.276",
 		"@remotion/bundler": "workspace:*",
-		"@types/node": "18.14.6",
-		"eslint": "8.42.0",
-		"prettier": "3.1.1",
-		"prettier-plugin-organize-imports": "3.2.4",
-		"remotion": "workspace:*"
+		"remotion": "workspace:*",
+		"@remotion/eslint-config-internal": "workspace:*",
+		"eslint": "9.19.0"
 	},
 	"peerDependencies": {
 		"@remotion/bundler": "workspace:*"
@@ -52,5 +47,6 @@
 	],
 	"publishConfig": {
 		"access": "public"
-	}
+	},
+	"homepage": "https://www.remotion.dev/docs/legacy-babel"
 }

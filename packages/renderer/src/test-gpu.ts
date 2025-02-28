@@ -2,6 +2,8 @@ import type {BrowserExecutable} from './browser-executable';
 import {getPageAndCleanupFn} from './get-browser-instance';
 import type {LogLevel} from './log-level';
 import type {ChromiumOptions} from './open-browser';
+import type {ChromeMode} from './options/chrome-mode';
+import type {OnBrowserDownload} from './options/on-browser-download';
 import {puppeteerEvaluateWithCatch} from './puppeteer-evaluate';
 
 type Item = {
@@ -15,20 +17,28 @@ export const getChromiumGpuInformation = async ({
 	logLevel,
 	chromiumOptions,
 	timeoutInMilliseconds,
+	onBrowserDownload,
+	chromeMode,
 }: {
 	browserExecutable: BrowserExecutable;
 	indent: boolean;
 	logLevel: LogLevel;
 	chromiumOptions: ChromiumOptions;
 	timeoutInMilliseconds: number;
+	onBrowserDownload: OnBrowserDownload;
+	chromeMode: ChromeMode;
 }) => {
-	const {page, cleanup} = await getPageAndCleanupFn({
+	const {page, cleanupPage: cleanup} = await getPageAndCleanupFn({
 		passedInInstance: undefined,
 		browserExecutable,
 		chromiumOptions,
 		forceDeviceScaleFactor: undefined,
 		indent,
 		logLevel,
+		onBrowserDownload,
+		chromeMode,
+		pageIndex: 0,
+		onBrowserLog: null,
 	});
 
 	await page.goto({url: 'chrome://gpu', timeout: 12000});

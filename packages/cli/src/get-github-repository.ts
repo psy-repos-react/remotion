@@ -1,8 +1,10 @@
 import {BundlerInternals} from '@remotion/bundler';
-import type {GitSource} from '@remotion/studio';
+import type {LogLevel} from '@remotion/renderer';
+import type {GitSource} from '@remotion/studio-shared';
 import {execSync} from 'child_process';
 import {existsSync, readFileSync} from 'fs';
 import path from 'path';
+import {Log} from './log';
 
 export type ParsedGitRemote = {
 	type: 'github';
@@ -23,7 +25,7 @@ const getGitRemotes = (lines: string[]) => {
 				open = false;
 			}
 		} else if (open) {
-			sections[sections.length - 1].push(line);
+			(sections[sections.length - 1] as string[]).push(line);
 		}
 	}
 
@@ -31,7 +33,7 @@ const getGitRemotes = (lines: string[]) => {
 		const url = s.find((l) => l.trimStart().startsWith('url = '));
 
 		return {
-			remote: s[0].replace('[remote "', '').replace('"]', ''),
+			remote: (s[0] as string).replace('[remote "', '').replace('"]', ''),
 			url: url ? url.replace('url = ', '').trim() : null,
 		};
 	});
@@ -69,8 +71,8 @@ export const normalizeGitRemoteUrl = (url: string): ParsedGitRemote | null => {
 		if (matched) {
 			return {
 				type: 'github',
-				name: matched[2],
-				org: matched[1],
+				name: matched[2] as string,
+				org: matched[1] as string,
 			};
 		}
 	}
@@ -79,8 +81,8 @@ export const normalizeGitRemoteUrl = (url: string): ParsedGitRemote | null => {
 	if (gitHubMatch) {
 		return {
 			type: 'github',
-			name: gitHubMatch[2],
-			org: gitHubMatch[1],
+			name: gitHubMatch[2] as string,
+			org: gitHubMatch[1] as string,
 		};
 	}
 
@@ -88,18 +90,24 @@ export const normalizeGitRemoteUrl = (url: string): ParsedGitRemote | null => {
 	if (gitHubMatchWithoutGit) {
 		return {
 			type: 'github',
-			name: gitHubMatchWithoutGit[2],
-			org: gitHubMatchWithoutGit[1],
+			name: gitHubMatchWithoutGit[2] as string,
+			org: gitHubMatchWithoutGit[1] as string,
 		};
 	}
 
 	return null;
 };
 
-export const getGifRef = (): string | null => {
+export const getGifRef = (logLevel: LogLevel): string | null => {
 	try {
-		return execSync('git rev-parse --abbrev-ref HEAD').toString('utf-8').trim();
+		const ret = execSync('git rev-parse --abbrev-ref HEAD', {
+			stdio: ['ignore', 'pipe', 'ignore'],
+		})
+			.toString('utf-8')
+			.trim();
+		return ret;
 	} catch (err) {
+		Log.verbose({logLevel, indent: false}, 'Could not get git ref', err);
 		return null;
 	}
 };
@@ -129,12 +137,25 @@ const getFromEnvVariables = (): GitSource | null => {
 	return null;
 };
 
-export const getGitSource = (remotionRoot: string | null): GitSource | null => {
-	if (remotionRoot === null) {
+export const getGitSource = ({
+	remotionRoot,
+	disableGitSource,
+	logLevel,
+}: {
+	remotionRoot: string;
+	disableGitSource: boolean;
+	logLevel: LogLevel;
+}): GitSource | null => {
+	if (disableGitSource) {
+		return null;
+	}
+
+	const fromEnv = getFromEnvVariables();
+	if (fromEnv) {
 		return getFromEnvVariables();
 	}
 
-	const ref = getGifRef();
+	const ref = getGifRef(logLevel);
 	if (!ref) {
 		return null;
 	}

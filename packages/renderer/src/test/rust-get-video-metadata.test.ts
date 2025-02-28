@@ -1,6 +1,6 @@
+import {expect, test} from 'bun:test';
 import {existsSync} from 'node:fs';
 import path from 'node:path';
-import {expect, test} from 'vitest';
 import {startLongRunningCompositor} from '../compositor/compositor';
 import type {VideoMetadata} from '../compositor/payloads';
 
@@ -9,6 +9,8 @@ test('Should return video metadata', async () => {
 		maximumFrameCacheItemsInBytes: null,
 		logLevel: 'info',
 		indent: false,
+		binariesDirectory: null,
+		extraThreads: 0,
 	});
 
 	const videoFile = path.join(
@@ -25,7 +27,9 @@ test('Should return video metadata', async () => {
 	const metadataResponse = await compositor.executeCommand('GetVideoMetadata', {
 		src: videoFile,
 	});
-	const metadataJson = JSON.parse(metadataResponse.toString('utf-8'));
+	const metadataJson = JSON.parse(
+		new TextDecoder('utf-8').decode(metadataResponse),
+	);
 
 	const data: VideoMetadata = {
 		fps: 24,
@@ -48,6 +52,8 @@ test('Should return an error due to non existing file', async () => {
 		maximumFrameCacheItemsInBytes: null,
 		logLevel: 'info',
 		indent: false,
+		binariesDirectory: null,
+		extraThreads: 0,
 	});
 
 	try {
@@ -66,6 +72,8 @@ test('Should return an error due to using a audio file', async () => {
 		maximumFrameCacheItemsInBytes: null,
 		logLevel: 'info',
 		indent: false,
+		binariesDirectory: null,
+		extraThreads: 0,
 	});
 
 	const audioFile = path.join(

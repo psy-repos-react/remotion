@@ -7,12 +7,14 @@ import type {
 	RenderJob,
 	SymbolicatedStackFrame,
 } from '@remotion/studio-shared';
-import {SOURCE_MAP_ENDPOINT} from '@remotion/studio-shared';
+import {SOURCE_MAP_ENDPOINT, getProjectName} from '@remotion/studio-shared';
+import fs, {createWriteStream} from 'fs';
 import {createReadStream, existsSync, statSync} from 'node:fs';
 import type {IncomingMessage, ServerResponse} from 'node:http';
 import path, {join} from 'node:path';
 import {URLSearchParams} from 'node:url';
 import {getFileSource} from './helpers/get-file-source';
+import {getInstalledInstallablePackages} from './helpers/get-installed-installable-packages';
 import {
 	getDisplayNameForEditor,
 	guessEditor,
@@ -24,7 +26,6 @@ import {getPackageManager} from './preview-server/get-package-manager';
 import {handleRequest} from './preview-server/handler';
 import type {LiveEventsServer} from './preview-server/live-events';
 import {parseRequestBody} from './preview-server/parse-body';
-import {getProjectInfo} from './preview-server/project-info';
 import {fetchFolder, getFiles} from './preview-server/public-folder';
 import {serveStatic} from './preview-server/serve-static';
 
@@ -55,6 +56,7 @@ const handleFallback = async ({
 	getRenderDefaults,
 	numberOfAudioTags,
 	gitSource,
+	logLevel,
 }: {
 	remotionRoot: string;
 	hash: string;
@@ -66,18 +68,22 @@ const handleFallback = async ({
 	getRenderDefaults: () => RenderDefaults;
 	numberOfAudioTags: number;
 	gitSource: GitSource | null;
+	logLevel: LogLevel;
 }) => {
 	const [edit] = await editorGuess;
 	const displayName = getDisplayNameForEditor(edit ? edit.command : null);
 
 	response.setHeader('content-type', 'text/html');
 	response.writeHead(200);
-	const packageManager = getPackageManager(remotionRoot, undefined);
+	const packageManager = getPackageManager(remotionRoot, undefined, 0);
 	fetchFolder({publicDir, staticHash: hash});
+
+	const installedDependencies = getInstalledInstallablePackages(remotionRoot);
+
 	response.end(
 		BundlerInternals.indexHtml({
 			staticHash: hash,
-			baseDir: '/',
+			publicPath: '/',
 			editorName: displayName,
 			envVariables: getEnvVariables(),
 			inputProps: getCurrentInputProps(),
@@ -92,19 +98,18 @@ const handleFallback = async ({
 			renderDefaults: getRenderDefaults(),
 			publicFolderExists: existsSync(publicDir) ? publicDir : null,
 			gitSource,
+			projectName: getProjectName({
+				basename: path.basename,
+				gitSource,
+				resolvedRemotionRoot: remotionRoot,
+			}),
+			installedDependencies,
+			packageManager:
+				packageManager === 'unknown' ? 'unknown' : packageManager.manager,
+			logLevel,
+			mode: 'dev',
 		}),
 	);
-};
-
-const handleProjectInfo = async (
-	remotionRoot: string,
-	_: IncomingMessage,
-	response: ServerResponse,
-) => {
-	const data = await getProjectInfo(remotionRoot);
-	response.setHeader('content-type', 'application/json');
-	response.writeHead(200);
-	response.end(JSON.stringify(data));
 };
 
 const handleFileSource = async ({
@@ -144,6 +149,7 @@ const handleOpenInEditor = async (
 	remotionRoot: string,
 	req: IncomingMessage,
 	res: ServerResponse,
+	logLevel: LogLevel,
 ) => {
 	if (req.method === 'OPTIONS') {
 		res.statusCode = 200;
@@ -168,6 +174,7 @@ const handleOpenInEditor = async (
 			fileName: path.resolve(remotionRoot, stack.originalFileName as string),
 			lineNumber: stack.originalLineNumber as number,
 			vsCodeNewWindow: false,
+			logLevel,
 		});
 		res.setHeader('content-type', 'application/json');
 		res.writeHead(200);
@@ -176,7 +183,7 @@ const handleOpenInEditor = async (
 				success: didOpen,
 			}),
 		);
-	} catch (err) {
+	} catch {
 		res.setHeader('content-type', 'application/json');
 		res.writeHead(200);
 
@@ -185,6 +192,46 @@ const handleOpenInEditor = async (
 				success: false,
 			}),
 		);
+	}
+};
+
+const handleAddAsset = ({
+	req,
+	res,
+	search,
+	publicDir,
+}: {
+	req: IncomingMessage;
+	res: ServerResponse;
+	search: string;
+	publicDir: string;
+}): void => {
+	try {
+		const query = new URLSearchParams(search);
+
+		const filePath = query.get('filePath');
+		if (typeof filePath !== 'string') {
+			throw new Error('No `filePath` provided');
+		}
+
+		const absolutePath = path.join(publicDir, filePath);
+
+		const relativeToPublicDir = path.relative(publicDir, absolutePath);
+		if (relativeToPublicDir.startsWith('..')) {
+			throw new Error(`Not allowed to write to ${relativeToPublicDir}`);
+		}
+
+		fs.mkdirSync(path.dirname(absolutePath), {recursive: true});
+
+		const writeStream = createWriteStream(absolutePath);
+		writeStream.on('close', () => {
+			res.end(JSON.stringify({success: true}));
+		});
+
+		req.pipe(writeStream);
+	} catch (err) {
+		res.statusCode = 500;
+		res.end(JSON.stringify({error: (err as Error).message}));
 	}
 };
 
@@ -252,6 +299,7 @@ export const handleRoutes = ({
 	numberOfAudioTags,
 	queueMethods: methods,
 	gitSource,
+	binariesDirectory,
 }: {
 	staticHash: string;
 	staticHashPrefix: string;
@@ -271,12 +319,9 @@ export const handleRoutes = ({
 	numberOfAudioTags: number;
 	queueMethods: QueueMethods;
 	gitSource: GitSource | null;
+	binariesDirectory: string | null;
 }) => {
 	const url = new URL(request.url as string, 'http://localhost');
-
-	if (url.pathname === '/api/project-info') {
-		return handleProjectInfo(remotionRoot, request, response);
-	}
 
 	if (url.pathname === '/api/file-source') {
 		return handleFileSource({
@@ -288,7 +333,16 @@ export const handleRoutes = ({
 	}
 
 	if (url.pathname === '/api/open-in-editor') {
-		return handleOpenInEditor(remotionRoot, request, response);
+		return handleOpenInEditor(remotionRoot, request, response, logLevel);
+	}
+
+	if (url.pathname === '/api/add-asset') {
+		return handleAddAsset({
+			req: request,
+			res: response,
+			search: url.search,
+			publicDir,
+		});
 	}
 
 	for (const [key, value] of Object.entries(allApiRoutes)) {
@@ -304,11 +358,13 @@ export const handleRoutes = ({
 				response,
 				logLevel,
 				methods,
+				binariesDirectory,
+				publicDir,
 			});
 		}
 	}
 
-	if (url.pathname === '/remotion.png') {
+	if (url.pathname === '/favicon.ico') {
 		return handleFavicon(request, response);
 	}
 
@@ -336,6 +392,7 @@ export const handleRoutes = ({
 			path: filePath,
 			req: request,
 			res: response,
+			allowOutsidePublicFolder: false,
 		});
 	}
 
@@ -355,6 +412,7 @@ export const handleRoutes = ({
 			path: filePath,
 			req: request,
 			res: response,
+			allowOutsidePublicFolder: false,
 		});
 	}
 
@@ -373,5 +431,6 @@ export const handleRoutes = ({
 		getRenderDefaults,
 		numberOfAudioTags,
 		gitSource,
+		logLevel,
 	});
 };

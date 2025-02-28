@@ -54,8 +54,8 @@ const subtitle: React.CSSProperties = {
 const SELECTED_CLASSNAME = '__remotion_selected_classname';
 
 export const RenderQueueItem: React.FC<{
-	job: RenderJob;
-	selected: boolean;
+	readonly job: RenderJob;
+	readonly selected: boolean;
 }> = ({job, selected}) => {
 	const [hovered, setHovered] = useState(false);
 
@@ -75,12 +75,13 @@ export const RenderQueueItem: React.FC<{
 		return {
 			...container,
 			backgroundColor: getBackgroundFromHoverState({
-				hovered: isHoverable && hovered,
+				hovered: isHoverable && hovered && job.type !== 'sequence',
 				selected,
 			}),
 			userSelect: 'none',
+			WebkitUserSelect: 'none',
 		};
-	}, [hovered, isHoverable, selected]);
+	}, [hovered, isHoverable, job.type, selected]);
 
 	const scrollCurrentIntoView = useCallback(() => {
 		document
@@ -90,6 +91,11 @@ export const RenderQueueItem: React.FC<{
 
 	const onClick: React.MouseEventHandler = useCallback(() => {
 		if (job.status !== 'done') {
+			return;
+		}
+
+		// Cannot show folders
+		if (job.type === 'sequence') {
 			return;
 		}
 
@@ -105,13 +111,7 @@ export const RenderQueueItem: React.FC<{
 			return {type: 'output', path: `/${job.outName}`};
 		});
 		pushUrl(`/outputs/${job.outName}`);
-	}, [
-		job.outName,
-		job.status,
-		scrollCurrentIntoView,
-		selected,
-		setCanvasContent,
-	]);
+	}, [job, scrollCurrentIntoView, selected, setCanvasContent]);
 
 	useEffect(() => {
 		if (selected) {

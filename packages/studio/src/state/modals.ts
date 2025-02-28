@@ -1,5 +1,6 @@
 import type {
 	AudioCodec,
+	ChromeMode,
 	Codec,
 	ColorSpace,
 	LogLevel,
@@ -10,12 +11,14 @@ import type {
 	VideoImageFormat,
 	X264Preset,
 } from '@remotion/renderer';
+import type {HardwareAccelerationOption} from '@remotion/renderer/client';
+import type {PackageManager} from '@remotion/studio-shared';
 import type React from 'react';
 import {createContext} from 'react';
+import type {CompType} from '../components/NewComposition/DuplicateComposition';
 import type {QuickSwitcherMode} from '../components/QuickSwitcher/NoResults';
+import type {RenderType} from '../components/RenderModal/RenderModalAdvanced';
 import type {Bug, UpdateInfo} from '../components/UpdateCheck';
-
-export type CompType = 'composition' | 'still';
 
 export type RenderModalState = {
 	type: 'render';
@@ -43,13 +46,17 @@ export type RenderModalState = {
 	initialIgnoreCertificateErrors: boolean;
 	initialHeadless: boolean;
 	initialOffthreadVideoCacheSizeInBytes: number | null;
+	initialOffthreadVideoThreads: number | null;
 	initialColorSpace: ColorSpace;
 	initialMultiProcessOnLinux: boolean;
 	initialUserAgent: string | null;
 	initialEncodingMaxRate: string | null;
 	initialEncodingBufferSize: string | null;
+	initialForSeamlessAacConcatenation: boolean;
+	initialHardwareAcceleration: HardwareAccelerationOption;
 	initialBeep: boolean;
 	initialRepro: boolean;
+	initialChromeMode: ChromeMode;
 	minConcurrency: number;
 	maxConcurrency: number;
 	defaultProps: Record<string, unknown>;
@@ -57,12 +64,23 @@ export type RenderModalState = {
 	outFrameMark: number | null;
 	defaultConfigurationVideoCodec: Codec;
 	defaultConfigurationAudioCodec: AudioCodec | null;
+	renderTypeOfLastRender: RenderType | null;
+	defaulMetadata: Record<string, string> | null;
 };
 
 export type ModalState =
 	| {
-			type: 'new-comp';
-			compType: CompType;
+			type: 'duplicate-comp';
+			compositionId: string;
+			compositionType: CompType;
+	  }
+	| {
+			type: 'delete-comp';
+			compositionId: string;
+	  }
+	| {
+			type: 'rename-comp';
+			compositionId: string;
 	  }
 	| RenderModalState
 	| {
@@ -73,6 +91,10 @@ export type ModalState =
 			type: 'update';
 			info: UpdateInfo;
 			knownBugs: Bug[];
+	  }
+	| {
+			type: 'install-packages';
+			packageManager: PackageManager;
 	  }
 	| {
 			type: 'quick-switcher';

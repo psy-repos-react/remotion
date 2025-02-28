@@ -1,19 +1,19 @@
 // Combine multiple video chunks, useful for decentralized rendering
 
-import {rmSync, writeFileSync} from 'node:fs';
+import {rmSync} from 'node:fs';
 import {join} from 'node:path';
-import type {AudioCodec} from './audio-codec';
-import {
-	getDefaultAudioCodec,
-	mapAudioCodecToFfmpegAudioCodecName,
-} from './audio-codec';
-import {callFf} from './call-ffmpeg';
 import type {Codec} from './codec';
-import {convertNumberOfGifLoopsToFfmpegSyntax} from './convert-number-of-gif-loops-to-ffmpeg';
+import {createCombinedAudio} from './combine-audio';
+import {combineVideoStreams} from './combine-video-streams';
+import {combineVideoStreamsSeamlessly} from './combine-video-streams-seamlessly';
+import {getFileExtensionFromCodec} from './get-extension-from-codec';
 import {isAudioCodec} from './is-audio-codec';
 import type {LogLevel} from './log-level';
 import {Log} from './logger';
-import {parseFfmpegProgress} from './parse-ffmpeg-progress';
+import type {CancelSignal} from './make-cancel-signal';
+import {muxVideoAndAudio} from './mux-video-and-audio';
+import type {AudioCodec} from './options/audio-codec';
+import {getExtensionFromAudioCodec} from './options/audio-codec';
 import {truthy} from './truthy';
 
 type Options = {
@@ -25,86 +25,169 @@ type Options = {
 	codec: Codec;
 	fps: number;
 	numberOfGifLoops: number | null;
-	audioCodec: AudioCodec | null;
+	resolvedAudioCodec: AudioCodec | null;
 	audioBitrate: string | null;
 	indent: boolean;
 	logLevel: LogLevel;
+	chunkDurationInSeconds: number;
+	binariesDirectory: string | null;
+	cancelSignal: CancelSignal | undefined;
+	seamlessAudio: boolean;
+	seamlessVideo: boolean;
+	muted: boolean;
+	metadata: Record<string, string> | null;
 };
 
-export const combineVideos = async (options: Options) => {
-	const {
-		files,
-		filelistDir,
-		output,
-		onProgress,
-		numberOfFrames,
-		codec,
-		fps,
-		numberOfGifLoops,
-		audioCodec,
-		audioBitrate,
-		indent,
-		logLevel,
-	} = options;
-	const fileList = files.map((p) => `file '${p}'`).join('\n');
+const codecSupportsFastStart: {[key in Codec]: boolean} = {
+	'h264-mkv': false,
+	'h264-ts': false,
+	h264: true,
+	h265: true,
+	aac: false,
+	gif: false,
+	mp3: false,
+	prores: false,
+	vp8: false,
+	vp9: false,
+	wav: false,
+};
 
-	const fileListTxt = join(filelistDir, 'files.txt');
-	writeFileSync(fileListTxt, fileList);
+export const combineChunks = async ({
+	files,
+	filelistDir,
+	output,
+	onProgress,
+	numberOfFrames,
+	codec,
+	fps,
+	numberOfGifLoops,
+	resolvedAudioCodec,
+	audioBitrate,
+	indent,
+	logLevel,
+	chunkDurationInSeconds,
+	binariesDirectory,
+	cancelSignal,
+	seamlessAudio,
+	seamlessVideo,
+	muted,
+	metadata,
+}: Options) => {
+	const shouldCreateAudio = resolvedAudioCodec !== null && !muted;
+	const shouldCreateVideo = !isAudioCodec(codec);
 
-	const resolvedAudioCodec =
-		audioCodec ?? getDefaultAudioCodec({codec, preferLossless: false});
+	const videoOutput = shouldCreateVideo
+		? join(
+				filelistDir,
+				`video.${getFileExtensionFromCodec(codec, resolvedAudioCodec)}`,
+			)
+		: null;
 
-	const command = [
-		isAudioCodec(codec) ? null : '-r',
-		isAudioCodec(codec) ? null : String(fps),
-		'-f',
-		'concat',
-		'-safe',
-		'0',
-		'-i',
-		fileListTxt,
-		numberOfGifLoops === null ? null : '-loop',
-		numberOfGifLoops === null
-			? null
-			: convertNumberOfGifLoopsToFfmpegSyntax(numberOfGifLoops),
-		isAudioCodec(codec) ? null : '-c:v',
-		isAudioCodec(codec) ? null : codec === 'gif' ? 'gif' : 'copy',
-		resolvedAudioCodec ? '-c:a' : null,
-		resolvedAudioCodec
-			? mapAudioCodecToFfmpegAudioCodecName(resolvedAudioCodec)
-			: null,
-		resolvedAudioCodec === 'aac' ? '-cutoff' : null,
-		resolvedAudioCodec === 'aac' ? '18000' : null,
-		'-b:a',
-		audioBitrate ? audioBitrate : '320k',
-		codec === 'h264' ? '-movflags' : null,
-		codec === 'h264' ? 'faststart' : null,
-		'-y',
-		output,
-	].filter(truthy);
+	const audioOutput = shouldCreateAudio
+		? join(
+				filelistDir,
+				`audio.${getExtensionFromAudioCodec(resolvedAudioCodec)}`,
+			)
+		: null;
 
-	Log.verbose({indent, logLevel}, 'Combining command: ', command);
+	const audioFiles = files.filter((f) => f.endsWith('audio'));
+	const videoFiles = files.filter((f) => f.endsWith('video'));
+
+	let concatenatedAudio = 0;
+	let concatenatedVideo = 0;
+	let muxing = 0;
+
+	const updateProgress = () => {
+		const totalFrames =
+			(shouldCreateAudio ? numberOfFrames : 0) +
+			(shouldCreateVideo ? numberOfFrames : 0) +
+			numberOfFrames;
+		const actualProgress = concatenatedAudio + concatenatedVideo + muxing;
+
+		onProgress((actualProgress / totalFrames) * numberOfFrames);
+	};
+
+	Log.verbose(
+		{indent, logLevel},
+		`Combining chunks, audio = ${
+			shouldCreateAudio === false
+				? 'no'
+				: seamlessAudio
+					? 'seamlessly'
+					: 'normally'
+		}, video = ${
+			shouldCreateVideo === false
+				? 'no'
+				: seamlessVideo
+					? 'seamlessly'
+					: 'normally'
+		}`,
+	);
+	await Promise.all(
+		[
+			shouldCreateAudio && audioOutput
+				? createCombinedAudio({
+						audioBitrate,
+						filelistDir,
+						files: audioFiles,
+						indent,
+						logLevel,
+						output: audioOutput,
+						resolvedAudioCodec,
+						seamless: seamlessAudio,
+						chunkDurationInSeconds,
+						addRemotionMetadata: !shouldCreateVideo,
+						binariesDirectory,
+						fps,
+						cancelSignal,
+						onProgress: (frames) => {
+							concatenatedAudio = frames;
+							updateProgress();
+						},
+					})
+				: null,
+
+			shouldCreateVideo && !seamlessVideo && videoOutput
+				? combineVideoStreams({
+						codec,
+						filelistDir,
+						fps,
+						indent,
+						logLevel,
+						numberOfGifLoops,
+						output: videoOutput,
+						files: videoFiles,
+						addRemotionMetadata: !shouldCreateAudio,
+						binariesDirectory,
+						cancelSignal,
+						onProgress: (frames) => {
+							concatenatedVideo = frames;
+							updateProgress();
+						},
+					})
+				: null,
+		].filter(truthy),
+	);
 
 	try {
-		const task = callFf({
-			bin: 'ffmpeg',
-			args: command,
-			indent: options.indent,
-			logLevel: options.logLevel,
+		await muxVideoAndAudio({
+			audioOutput,
+			indent,
+			logLevel,
+			onProgress: (frames) => {
+				muxing = frames;
+				updateProgress();
+			},
+			output,
+			videoOutput: seamlessVideo
+				? combineVideoStreamsSeamlessly({files: videoFiles})
+				: videoOutput,
+			binariesDirectory,
+			fps,
+			cancelSignal,
+			addFaststart: codecSupportsFastStart[codec],
+			metadata,
 		});
-		task.stderr?.on('data', (data: Buffer) => {
-			if (onProgress) {
-				const parsed = parseFfmpegProgress(data.toString('utf8'));
-				if (parsed === undefined) {
-					Log.verbose({indent, logLevel}, data.toString('utf8'));
-				} else {
-					Log.verbose({indent, logLevel}, `Combined ${parsed} frames`);
-					onProgress(parsed);
-				}
-			}
-		});
-
-		await task;
 		onProgress(numberOfFrames);
 		rmSync(filelistDir, {recursive: true});
 	} catch (err) {

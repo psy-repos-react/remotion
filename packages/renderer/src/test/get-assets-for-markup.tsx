@@ -1,17 +1,13 @@
-/* eslint-disable no-restricted-imports */
-/**
- * @vitest-environment jsdom
- */
 import {render} from '@testing-library/react';
 import type {ComponentType} from 'react';
 import React, {
+	act,
 	useCallback,
 	useContext,
 	useLayoutEffect,
 	useMemo,
 	useState,
 } from 'react';
-import {act} from 'react-dom/test-utils';
 import type {CompositionManagerContext, TRenderAsset} from 'remotion';
 import {Internals} from 'remotion';
 
@@ -22,10 +18,10 @@ let collectAssets = (): TRenderAsset[] => [];
 
 const waitForWindowToBeReady = () => {
 	return new Promise<void>((resolve) => {
-		let interval: null | number | NodeJS.Timeout = null;
+		let interval: Timer | null = null;
 		const check = () => {
 			if (window.remotion_renderReady) {
-				clearInterval(interval as number);
+				clearInterval(interval as Timer);
 				resolve();
 			}
 		};
@@ -52,6 +48,7 @@ export const getAssetsForMarkup = async (
 		const [renderAssets, setAssets] = useState<TRenderAsset[]>([]);
 
 		const registerRenderAsset = useCallback((renderAsset: TRenderAsset) => {
+			Internals.validateRenderAsset(renderAsset);
 			setAssets((assts) => {
 				return [...assts, renderAsset];
 			});
@@ -110,7 +107,7 @@ export const getAssetsForMarkup = async (
 
 		return (
 			<Internals.CanUseRemotionHooksProvider>
-				<Internals.RemotionRoot numberOfAudioTags={0}>
+				<Internals.RemotionRoot numberOfAudioTags={0} logLevel="info">
 					<Internals.CompositionManager.Provider value={value}>
 						<Internals.RenderAssetManager.Provider value={assetContext}>
 							<Internals.ResolveCompositionConfig>
@@ -130,7 +127,7 @@ export const getAssetsForMarkup = async (
 		currentFrame++
 	) {
 		act(() => {
-			window.remotion_setFrame(currentFrame, ID);
+			window.remotion_setFrame(currentFrame, ID, 1);
 		});
 		await waitForWindowToBeReady();
 		collectedAssets.push(collectAssets());

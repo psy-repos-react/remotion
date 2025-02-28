@@ -1,27 +1,8 @@
 import type {StandardLonghandProperties} from 'csstype';
-import type {VideoConfig} from 'remotion';
+import type {PreviewSize, VideoConfig} from 'remotion';
+import {Internals} from 'remotion';
 import {calculatePlayerSize} from './utils/calculate-player-size.js';
-import type {PreviewSize} from './utils/preview-size.js';
 import type {Size} from './utils/use-element-size.js';
-
-export const calculateScale = ({
-	canvasSize,
-	compositionHeight,
-	compositionWidth,
-	previewSize,
-}: {
-	previewSize: PreviewSize['size'];
-	compositionWidth: number;
-	compositionHeight: number;
-	canvasSize: Size;
-}) => {
-	const heightRatio = canvasSize.height / compositionHeight;
-	const widthRatio = canvasSize.width / compositionWidth;
-
-	const ratio = Math.min(heightRatio, widthRatio);
-
-	return previewSize === 'auto' ? ratio : Number(previewSize);
-};
 
 type Layout = {
 	centerX: number;
@@ -42,7 +23,7 @@ export const calculateCanvasTransformation = ({
 	compositionHeight: number;
 	canvasSize: Size;
 }): Layout => {
-	const scale = calculateScale({
+	const scale = Internals.calculateScale({
 		canvasSize,
 		compositionHeight,
 		compositionWidth,
@@ -69,10 +50,14 @@ export const calculateOuterStyle = ({
 	config,
 	style,
 	canvasSize,
+	overflowVisible,
+	layout,
 }: {
 	config: VideoConfig | null;
 	style: React.CSSProperties | undefined;
 	canvasSize: Size | null;
+	overflowVisible: boolean;
+	layout: Layout | null;
 }): React.CSSProperties => {
 	if (!config) {
 		return {};
@@ -80,7 +65,7 @@ export const calculateOuterStyle = ({
 
 	return {
 		position: 'relative',
-		overflow: 'hidden',
+		overflow: overflowVisible ? 'visible' : 'hidden',
 		...calculatePlayerSize({
 			compositionHeight: config.height,
 			compositionWidth: config.width,
@@ -88,6 +73,7 @@ export const calculateOuterStyle = ({
 			height: style?.height as StandardLonghandProperties['width'],
 			width: style?.width as StandardLonghandProperties['height'],
 		}),
+		opacity: layout ? 1 : 0,
 		...style,
 	};
 };
@@ -97,11 +83,13 @@ export const calculateContainerStyle = ({
 	canvasSize,
 	layout,
 	scale,
+	overflowVisible,
 }: {
 	config: VideoConfig | null;
 	canvasSize: Size | null;
 	layout: Layout | null;
 	scale: number;
+	overflowVisible: boolean;
 }): React.CSSProperties => {
 	if (!config || !canvasSize || !layout) {
 		return {};
@@ -115,7 +103,7 @@ export const calculateContainerStyle = ({
 		transform: `scale(${scale})`,
 		marginLeft: layout.xCorrection,
 		marginTop: layout.yCorrection,
-		overflow: 'hidden',
+		overflow: overflowVisible ? 'visible' : 'hidden',
 	};
 };
 
@@ -123,10 +111,12 @@ export const calculateOuter = ({
 	layout,
 	scale,
 	config,
+	overflowVisible,
 }: {
 	layout: Layout | null;
 	scale: number;
 	config: VideoConfig | null;
+	overflowVisible: boolean;
 }) => {
 	if (!layout || !config) {
 		return {} as const;
@@ -142,6 +132,6 @@ export const calculateOuter = ({
 		position: 'absolute',
 		left: centerX,
 		top: centerY,
-		overflow: 'hidden',
+		overflow: overflowVisible ? 'visible' : 'hidden',
 	} as const;
 };

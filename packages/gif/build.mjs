@@ -1,5 +1,4 @@
 import esbuild from 'esbuild';
-import {execSync} from 'node:child_process';
 import fs from 'node:fs';
 
 const tmp = 'bundled-worker.js';
@@ -22,9 +21,7 @@ fs.writeFileSync(
 export const src =
 // eslint-disable-next-line no-template-curly-in-string
   ${JSON.stringify(content)};
-`.trim()
+`.trim(),
 );
-
-execSync('pnpm exec prettier --write src/worker/source.ts');
 
 fs.unlinkSync(tmp);

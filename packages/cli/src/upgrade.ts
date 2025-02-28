@@ -1,57 +1,50 @@
-import {RenderInternals} from '@remotion/renderer';
-import type {PackageManager} from '@remotion/studio-server';
+import {RenderInternals, type LogLevel} from '@remotion/renderer';
 import {StudioServerInternals} from '@remotion/studio-server';
-import path from 'node:path';
-import {ConfigInternals} from './config';
+import {spawn} from 'node:child_process';
+import {chalk} from './chalk';
 import {listOfRemotionPackages} from './list-of-remotion-packages';
 import {Log} from './log';
 
-const getUpgradeCommand = ({
-	manager,
-	packages,
+export const upgradeCommand = async ({
+	remotionRoot,
+	packageManager,
 	version,
+	logLevel,
+	args,
 }: {
-	manager: PackageManager;
-	packages: string[];
-	version: string;
-}): string[] => {
-	const pkgList = packages.map((p) => `${p}@${version}`);
-	const commands: {[key in PackageManager]: string[]} = {
-		npm: ['i', '--save-exact', '--no-fund', '--no-audit', ...pkgList],
-		pnpm: ['i', '--save-exact', ...pkgList],
-		yarn: ['add', '--exact', ...pkgList],
-		bun: ['i', ...pkgList],
-	};
-
-	return commands[manager];
-};
-
-export const upgrade = async (
-	remotionRoot: string,
-	packageManager: string | undefined,
-	version: string | undefined,
-) => {
-	const packageJsonFilePath = path.join(remotionRoot, 'package.json');
-	const packageJson = require(packageJsonFilePath);
-	const dependencies = Object.keys(packageJson.dependencies);
-	const devDependencies = Object.keys(packageJson.devDependencies ?? {});
-	const optionalDependencies = Object.keys(
-		packageJson.optionalDependencies ?? {},
-	);
-	const peerDependencies = Object.keys(packageJson.peerDependencies ?? {});
+	remotionRoot: string;
+	packageManager: string | undefined;
+	version: string | undefined;
+	logLevel: LogLevel;
+	args: string[];
+}) => {
+	const {
+		dependencies,
+		devDependencies,
+		optionalDependencies,
+		peerDependencies,
+	} = StudioServerInternals.getInstalledDependencies(remotionRoot);
 
 	let targetVersion: string;
 	if (version) {
 		targetVersion = version;
-		Log.info('Upgrading to specified version: ' + version);
+		Log.info(
+			{indent: false, logLevel},
+			'Upgrading to specified version: ' + version,
+		);
 	} else {
 		targetVersion = await StudioServerInternals.getLatestRemotionVersion();
-		Log.info('Newest Remotion version is', targetVersion);
+		Log.info(
+			{indent: false, logLevel},
+			'Newest Remotion version is',
+			targetVersion,
+		);
 	}
 
 	const manager = StudioServerInternals.getPackageManager(
 		remotionRoot,
 		packageManager,
+		0,
 	);
 
 	if (manager === 'unknown') {
@@ -70,28 +63,43 @@ export const upgrade = async (
 			peerDependencies.includes(u),
 	);
 
-	const prom = RenderInternals.execa(
-		manager.manager,
-		getUpgradeCommand({
-			manager: manager.manager,
-			packages: toUpgrade,
-			version: targetVersion,
-		}),
-		{
-			env: {...process.env, ADBLOCK: '1', DISABLE_OPENCOLLECTIVE: '1'},
-			stdio: 'inherit',
-		},
-	);
-	if (
-		RenderInternals.isEqualOrBelowLogLevel(
-			ConfigInternals.Logging.getLogLevel(),
-			'info',
-		)
-	) {
-		prom.stdout?.pipe(process.stdout);
-	}
+	const command = StudioServerInternals.getInstallCommand({
+		manager: manager.manager,
+		packages: toUpgrade,
+		version: targetVersion,
+		additionalArgs: args,
+	});
 
-	await prom;
-	Log.info('⏫ Remotion has been upgraded!');
-	Log.info('https://remotion.dev/changelog');
+	Log.info(
+		{indent: false, logLevel},
+		chalk.gray(`$ ${manager.manager} ${command.join(' ')}`),
+	);
+
+	const task = spawn(manager.manager, command, {
+		env: {
+			...process.env,
+			ADBLOCK: '1',
+			DISABLE_OPENCOLLECTIVE: '1',
+		},
+		stdio: RenderInternals.isEqualOrBelowLogLevel(logLevel, 'info')
+			? 'inherit'
+			: 'ignore',
+	});
+
+	await new Promise<void>((resolve) => {
+		task.on('close', (code) => {
+			if (code === 0) {
+				resolve();
+			} else if (RenderInternals.isEqualOrBelowLogLevel(logLevel, 'info')) {
+				throw new Error('Failed to upgrade Remotion, see logs above');
+			} else {
+				throw new Error(
+					'Failed to upgrade Remotion, run with --log=info info to see logs',
+				);
+			}
+		});
+	});
+
+	Log.info({indent: false, logLevel}, '⏫ Remotion has been upgraded!');
+	Log.info({indent: false, logLevel}, 'https://remotion.dev/changelog');
 };

@@ -1,3 +1,5 @@
+import {ENABLE_V5_BREAKING_CHANGES} from './v5-flag';
+
 let warnedServer = false;
 let warnedPlayer = false;
 
@@ -25,11 +27,17 @@ const warnPlayerOnce = () => {
 	);
 };
 
-/**
- * @description The function array containing all files in the public/ folder. You can reference them by using staticFile().
- * @see [Documentation](https://www.remotion.dev/docs/getstaticfiles)
+/*
+ * @description Gets an array containing all files in the `public/` folder. You can reference them by using `staticFile()`.
+ * @see [Documentation](https://remotion.dev/docs/getstaticfiles)
  */
 export const getStaticFiles = (): StaticFile[] => {
+	if (ENABLE_V5_BREAKING_CHANGES) {
+		throw new Error(
+			'getStaticFiles() has moved into the `@remotion/studio` package. Update your imports.',
+		);
+	}
+
 	if (typeof document === 'undefined') {
 		warnServerOnce();
 		return [];

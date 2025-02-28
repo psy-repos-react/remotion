@@ -1,10 +1,13 @@
+import type {HardwareAccelerationOption} from './client';
 import type {Codec} from './codec';
 import {validateQualitySettings} from './crf';
 import {getCodecName} from './get-codec-name';
-import type {ColorSpace} from './options/color-space';
+import type {LogLevel} from './log-level';
+import {Log} from './logger';
+import {DEFAULT_COLOR_SPACE, type ColorSpace} from './options/color-space';
+import type {X264Preset} from './options/x264-preset';
 import type {PixelFormat} from './pixel-format';
 import {truthy} from './truthy';
-import type {X264Preset} from './x264-preset';
 
 const firstEncodingStepOnly = ({
 	hasPreencoded,
@@ -16,6 +19,7 @@ const firstEncodingStepOnly = ({
 	videoBitrate,
 	encodingMaxRate,
 	encodingBufferSize,
+	hardwareAcceleration,
 }: {
 	hasPreencoded: boolean;
 	proResProfileName: string | null;
@@ -26,6 +30,7 @@ const firstEncodingStepOnly = ({
 	videoBitrate: string | null;
 	encodingMaxRate: string | null;
 	encodingBufferSize: string | null;
+	hardwareAcceleration: HardwareAccelerationOption;
 }): string[][] => {
 	if (hasPreencoded || codec === 'gif') {
 		return [];
@@ -45,6 +50,7 @@ const firstEncodingStepOnly = ({
 			codec,
 			encodingMaxRate,
 			encodingBufferSize,
+			hardwareAcceleration,
 		}),
 	].filter(truthy);
 };
@@ -60,6 +66,9 @@ export const generateFfmpegArgs = ({
 	encodingMaxRate,
 	encodingBufferSize,
 	colorSpace,
+	hardwareAcceleration,
+	indent,
+	logLevel,
 }: {
 	hasPreencoded: boolean;
 	proResProfileName: string | null;
@@ -70,24 +79,55 @@ export const generateFfmpegArgs = ({
 	videoBitrate: string | null;
 	encodingMaxRate: string | null;
 	encodingBufferSize: string | null;
-	colorSpace: ColorSpace;
+	colorSpace: ColorSpace | null;
+	hardwareAcceleration: HardwareAccelerationOption;
+	indent: boolean;
+	logLevel: LogLevel;
 }): string[][] => {
-	const encoderName = getCodecName(codec);
+	const encoderSettings = getCodecName({
+		codec,
+		encodingMaxRate,
+		encodingBufferSize,
+		crf,
+		hardwareAcceleration,
+		indent,
+		logLevel,
+	});
 
-	if (encoderName === null) {
-		throw new TypeError('encoderName is null: ' + JSON.stringify(codec));
+	if (encoderSettings === null) {
+		throw new TypeError(
+			`encoderSettings is null: ${JSON.stringify(codec)} (hwaccel = ${hardwareAcceleration})`,
+		);
 	}
 
+	const {encoderName, hardwareAccelerated} = encoderSettings;
+	if (!hardwareAccelerated && hardwareAcceleration === 'required') {
+		throw new Error(
+			`Codec ${codec} does not support hardware acceleration on ${process.platform}, but "hardwareAcceleration" is set to "required"`,
+		);
+	}
+
+	Log.verbose(
+		{indent, logLevel, tag: 'stitchFramesToVideo()'},
+		`Encoder: ${encoderName}, hardware accelerated: ${hardwareAccelerated}`,
+	);
+
+	const resolvedColorSpace = colorSpace ?? DEFAULT_COLOR_SPACE;
+
 	const colorSpaceOptions: string[][] =
-		colorSpace === 'bt709'
+		resolvedColorSpace === 'bt709'
 			? [
 					['-colorspace:v', 'bt709'],
 					['-color_primaries:v', 'bt709'],
 					['-color_trc:v', 'bt709'],
 					['-color_range', 'tv'],
-					hasPreencoded ? [] : ['-vf', 'zscale=m=709:min=709:r=limited'],
+					hasPreencoded
+						? []
+						: // https://www.canva.dev/blog/engineering/a-journey-through-colour-space-with-ffmpeg/
+							// "Color range" section
+							['-vf', 'zscale=matrix=709:matrixin=709:range=limited'],
 				]
-			: colorSpace === 'bt2020-ncl'
+			: resolvedColorSpace === 'bt2020-ncl'
 				? [
 						['-colorspace:v', 'bt2020nc'],
 						['-color_primaries:v', 'bt2020'],
@@ -95,12 +135,17 @@ export const generateFfmpegArgs = ({
 						['-color_range', 'tv'],
 						hasPreencoded
 							? []
-							: ['-vf', 'zscale=m=2020_ncl:min=2020_ncl:r=limited'],
+							: [
+									'-vf',
+									// ChatGPT: Therefore, just like BT.709, BT.2020 also uses the limited range where the digital code value for black is at 16,16,16 and not 0,0,0 in an 8-bit video system.
+									'zscale=matrix=2020_ncl:matrixin=2020_ncl:range=limited',
+								],
 					]
 				: [];
 
 	return [
 		['-c:v', hasPreencoded ? 'copy' : encoderName],
+		codec === 'h264-ts' ? ['-f', 'mpegts'] : null,
 		// -c:v is the same as -vcodec as -codec:video
 		// and specified the video codec.
 		...colorSpaceOptions,
@@ -114,6 +159,7 @@ export const generateFfmpegArgs = ({
 			encodingMaxRate,
 			encodingBufferSize,
 			x264Preset,
+			hardwareAcceleration,
 		}),
 	].filter(truthy);
 };

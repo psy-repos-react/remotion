@@ -1,5 +1,6 @@
 import type {
 	AudioCodec,
+	ChromeMode,
 	Codec,
 	ColorSpace,
 	LogLevel,
@@ -17,14 +18,11 @@ type BaseRenderProgress = {
 	value: number;
 };
 
-export type RenderStep = 'bundling' | 'rendering' | 'stitching';
-
 export type RenderingProgressInput = {
 	frames: number;
 	totalFrames: number;
-	steps: RenderStep[];
-	concurrency: number;
 	doneIn: number | null;
+	timeRemainingInMilliseconds: number | null;
 };
 
 export type StitchingProgressInput = {
@@ -59,6 +57,19 @@ export type AggregateRenderProgress = {
 	downloads: DownloadProgress[];
 	bundling: BundlingState;
 	copyingState: CopyingState;
+	artifactState: ArtifactProgress;
+};
+
+export type ReceivedArtifact = {
+	filename: string;
+	absoluteOutputDestination: string;
+	relativeOutputDestination: string;
+	sizeInBytes: number;
+	alreadyExisted: boolean;
+};
+
+export type ArtifactProgress = {
+	received: ReceivedArtifact[];
 };
 
 export type JobProgressCallback = (
@@ -93,6 +104,7 @@ type RenderJobDynamicFields =
 			frame: number;
 			scale: number;
 			offthreadVideoCacheSizeInBytes: number | null;
+			offthreadVideoThreads: number | null;
 	  } & RenderJobDynamicStatus)
 	| ({
 			type: 'sequence';
@@ -103,6 +115,7 @@ type RenderJobDynamicFields =
 			startFrame: number;
 			endFrame: number;
 			offthreadVideoCacheSizeInBytes: number | null;
+			offthreadVideoThreads: number | null;
 	  } & RenderJobDynamicStatus)
 	| ({
 			type: 'video';
@@ -128,10 +141,15 @@ type RenderJobDynamicFields =
 			numberOfGifLoops: number | null;
 			disallowParallelEncoding: boolean;
 			offthreadVideoCacheSizeInBytes: number | null;
+			offthreadVideoThreads: number | null;
 			colorSpace: ColorSpace;
+			forSeamlessAacConcatenation: boolean;
+			separateAudioTo: string | null;
+			hardwareAcceleration: HardwareAccelerationOption;
 	  } & RenderJobDynamicStatus);
 
 import type {ChromiumOptions, OpenGlRenderer} from '@remotion/renderer';
+import type {HardwareAccelerationOption} from '@remotion/renderer/client';
 
 export type RequiredChromiumOptions = Required<ChromiumOptions>;
 export type UiOpenGlOptions = OpenGlRenderer | 'default';
@@ -151,6 +169,9 @@ export type RenderJob = {
 	multiProcessOnLinux: boolean;
 	beepOnFinish: boolean;
 	repro: boolean;
+	binariesDirectory: string | null;
+	metadata: Record<string, string> | null;
+	chromeMode: ChromeMode;
 } & RenderJobDynamicFields;
 
 export type RenderJobWithCleanup = RenderJob & {

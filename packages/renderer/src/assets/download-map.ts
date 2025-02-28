@@ -1,14 +1,15 @@
 import fs, {mkdirSync} from 'node:fs';
 import path from 'node:path';
-import type {TRenderAsset} from 'remotion/no-react';
 import {deleteDirectory} from '../delete-directory';
 import {OffthreadVideoServerEmitter} from '../offthread-video-server';
+import type {FrameAndAssets} from '../render-frames';
 import {tmpDir} from '../tmp-dir';
 import type {RenderMediaOnDownload} from './download-and-map-assets-to-file';
 
 export type AudioChannelsAndDurationResultCache = {
 	channels: number;
 	duration: number | null;
+	startTime: number | null;
 };
 
 export type DownloadMap = {
@@ -39,14 +40,20 @@ export type DownloadMap = {
 	stitchFrames: string;
 	assetDir: string;
 	compositingDir: string;
-	compositorCache: {[key: string]: string};
+	preventCleanup: () => void;
+	allowCleanup: () => void;
+	isPreventedFromCleanup: () => boolean;
 };
 
 export type RenderAssetInfo = {
-	assets: TRenderAsset[][];
+	assets: FrameAndAssets[];
 	imageSequenceName: string;
 	firstFrameIndex: number;
 	downloadMap: DownloadMap;
+	chunkLengthInSeconds: number;
+	trimLeftOffset: number;
+	trimRightOffset: number;
+	forSeamlessAacConcatenation: boolean;
 };
 
 const makeAndReturn = (dir: string, name: string) => {
@@ -55,11 +62,18 @@ const makeAndReturn = (dir: string, name: string) => {
 	return p;
 };
 
-const packageJsonPath = path.join(__dirname, '..', '..', 'package.json');
+const dontInlineThis = 'package.json';
 
-const packageJson = fs.existsSync(packageJsonPath)
-	? JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'))
-	: null;
+let packageJsonPath = null;
+
+try {
+	packageJsonPath = require.resolve('../../' + dontInlineThis);
+} catch {}
+
+const packageJson =
+	packageJsonPath && fs.existsSync(packageJsonPath)
+		? JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'))
+		: null;
 
 export const makeDownloadMap = (): DownloadMap => {
 	const dir = tmpDir(
@@ -67,6 +81,8 @@ export const makeDownloadMap = (): DownloadMap => {
 			? `remotion-v${packageJson.version.replace(/\./g, '-')}-assets`
 			: 'remotion-assets',
 	);
+
+	let prevented = false;
 
 	return {
 		isDownloadingMap: {},
@@ -83,12 +99,24 @@ export const makeDownloadMap = (): DownloadMap => {
 		audioPreprocessing: makeAndReturn(dir, 'remotion-audio-preprocessing'),
 		stitchFrames: makeAndReturn(dir, 'remotion-stitch-temp-dir'),
 		compositingDir: makeAndReturn(dir, 'remotion-compositing-temp-dir'),
-		compositorCache: {},
 		emitter: new OffthreadVideoServerEmitter(),
+		preventCleanup: () => {
+			prevented = true;
+		},
+		allowCleanup: () => {
+			prevented = false;
+		},
+		isPreventedFromCleanup: () => {
+			return prevented;
+		},
 	};
 };
 
 export const cleanDownloadMap = (downloadMap: DownloadMap) => {
+	if (downloadMap.isPreventedFromCleanup()) {
+		return;
+	}
+
 	deleteDirectory(downloadMap.downloadDir);
 	deleteDirectory(downloadMap.complexFilter);
 	deleteDirectory(downloadMap.compositingDir);

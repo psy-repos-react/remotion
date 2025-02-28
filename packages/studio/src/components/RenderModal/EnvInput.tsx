@@ -1,7 +1,7 @@
 import React, {useCallback} from 'react';
-import {Row, Spacing} from '../layout';
 import {RemotionInput} from '../NewComposition/RemInput';
 import {ValidationMessage} from '../NewComposition/ValidationMessage';
+import {Row, Spacing} from '../layout';
 import {InlineEyeButton} from './InlineEyeIcon';
 import {InlineRemoveButton} from './InlineRemoveButton';
 import {optionRow} from './layout';
@@ -17,14 +17,14 @@ const validationStyle = {
 };
 
 export const EnvInput: React.FC<{
-	onEnvKeyChange: (index: number, newValue: string) => void;
-	onEnvValChange: (index: number, newValue: string) => void;
-	envKey: string;
-	envVal: string;
-	onDelete: (index: number) => void;
-	index: number;
-	autoFocus: boolean;
-	isDuplicate: boolean;
+	readonly onEnvKeyChange: (index: number, newValue: string) => void;
+	readonly onEnvValChange: (index: number, newValue: string) => void;
+	readonly envKey: string;
+	readonly envVal: string;
+	readonly onDelete: (index: number) => void;
+	readonly index: number;
+	readonly autoFocus: boolean;
+	readonly isDuplicate: boolean;
 }> = ({
 	onEnvKeyChange,
 	onEnvValChange,

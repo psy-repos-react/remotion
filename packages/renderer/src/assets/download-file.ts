@@ -26,7 +26,7 @@ const downloadFileWithoutRetries = ({onProgress, url, to: toFn}: Options) => {
 	return new Promise<Response>((resolve, reject) => {
 		let rejected = false;
 		let resolved = false;
-		let timeout: NodeJS.Timeout | undefined;
+		let timeout: Timer | undefined;
 
 		const resolveAndFlag = (val: Response) => {
 			resolved = true;
@@ -65,6 +65,8 @@ const downloadFileWithoutRetries = ({onProgress, url, to: toFn}: Options) => {
 
 		refreshTimeout();
 
+		let finishEventSent = false;
+
 		readFile(url)
 			.then((res) => {
 				const contentDisposition = res.headers['content-disposition'] ?? null;
@@ -87,11 +89,14 @@ const downloadFileWithoutRetries = ({onProgress, url, to: toFn}: Options) => {
 						return;
 					}
 
-					onProgress?.({
-						downloaded,
-						percent: 1,
-						totalSize: downloaded,
-					});
+					if (!finishEventSent) {
+						onProgress?.({
+							downloaded,
+							percent: 1,
+							totalSize: downloaded,
+						});
+					}
+
 					refreshTimeout();
 					return resolveAndFlag({sizeInBytes: downloaded, to});
 				});
@@ -102,11 +107,15 @@ const downloadFileWithoutRetries = ({onProgress, url, to: toFn}: Options) => {
 					refreshTimeout();
 					downloaded += d.length;
 					refreshTimeout();
+					const percent = totalSize === null ? null : downloaded / totalSize;
 					onProgress?.({
 						downloaded,
-						percent: totalSize === null ? null : downloaded / totalSize,
+						percent,
 						totalSize,
 					});
+					if (percent === 1) {
+						finishEventSent = true;
+					}
 				});
 				res.on('close', () => {
 					if (totalSize !== null && downloaded !== totalSize) {
@@ -138,6 +147,7 @@ export const downloadFile = async (
 		const {message} = err as Error;
 		if (
 			message === 'aborted' ||
+			message.includes('ECONNRESET') ||
 			message.includes(incorrectContentLengthToken) ||
 			// Try again if hitting internal errors
 			message.includes('503') ||

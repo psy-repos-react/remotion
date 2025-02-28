@@ -1,13 +1,16 @@
 import type React from 'react';
-import {useContext, useEffect} from 'react';
+import {useCallback, useContext, useEffect} from 'react';
 import type {AnyComposition} from 'remotion';
-import {getStaticFiles, Internals} from 'remotion';
+import {Internals} from 'remotion';
+import {getStaticFiles} from '../api/get-static-files';
+import {useMobileLayout} from '../helpers/mobile-layout';
 import type {ExpandedFoldersState} from '../helpers/persist-open-folders';
-import {getPathname, pushUrl} from '../helpers/url-state';
+import {getRoute, pushUrl} from '../helpers/url-state';
 import {FolderContext} from '../state/folders';
+import {SidebarContext} from '../state/sidebar';
 import {getKeysToExpand} from './CompositionSelector';
 import {explorerSidebarTabs} from './ExplorerPanel';
-import {deriveCanvasContentFromUrl} from './ZoomPersistor';
+import {deriveCanvasContentFromUrl} from './load-canvas-content-from-url';
 
 export const useSelectAsset = () => {
 	const {setCanvasContent} = useContext(Internals.CompositionManager);
@@ -37,32 +40,45 @@ export const useSelectAsset = () => {
 export const useSelectComposition = () => {
 	const {setCompositionFoldersExpanded} = useContext(FolderContext);
 	const {setCanvasContent} = useContext(Internals.CompositionManager);
+	const isMobileLayout = useMobileLayout();
+	const {setSidebarCollapsedState} = useContext(SidebarContext);
 
-	return (c: AnyComposition, push: boolean) => {
-		if (push) {
-			pushUrl(`/${c.id}`);
-		}
+	return useCallback(
+		(c: AnyComposition, push: boolean) => {
+			if (push) {
+				pushUrl(`/${c.id}`);
+			}
 
-		explorerSidebarTabs.current?.selectCompositionPanel();
+			explorerSidebarTabs.current?.selectCompositionPanel();
 
-		setCanvasContent({type: 'composition', compositionId: c.id});
+			setCanvasContent({type: 'composition', compositionId: c.id});
 
-		const {folderName, parentFolderName} = c;
+			const {folderName, parentFolderName} = c;
 
-		if (folderName !== null) {
-			setCompositionFoldersExpanded((ex) => {
-				const keysToExpand = getKeysToExpand(folderName, parentFolderName);
-				const newState: ExpandedFoldersState = {
-					...ex,
-				};
-				for (const key of keysToExpand) {
-					newState[key] = true;
+			if (folderName !== null) {
+				setCompositionFoldersExpanded((ex) => {
+					const keysToExpand = getKeysToExpand(folderName, parentFolderName);
+					const newState: ExpandedFoldersState = {
+						...ex,
+					};
+					for (const key of keysToExpand) {
+						newState[key] = true;
+					}
+
+					return newState;
+				});
+				if (isMobileLayout) {
+					setSidebarCollapsedState({left: 'collapsed', right: 'collapsed'});
 				}
-
-				return newState;
-			});
-		}
-	};
+			}
+		},
+		[
+			isMobileLayout,
+			setCanvasContent,
+			setCompositionFoldersExpanded,
+			setSidebarCollapsedState,
+		],
+	);
 };
 
 export const InitialCompositionLoader: React.FC = () => {
@@ -114,7 +130,7 @@ export const InitialCompositionLoader: React.FC = () => {
 		const onchange = () => {
 			const newCanvas = deriveCanvasContentFromUrl();
 			if (newCanvas && newCanvas.type === 'composition') {
-				const newComp = getPathname().substring(1);
+				const newComp = getRoute().substring(1);
 				const exists = compositions.find((c) => c.id === newComp);
 				if (exists) {
 					selectComposition(exists, false);

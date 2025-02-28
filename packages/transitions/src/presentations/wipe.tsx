@@ -226,6 +226,10 @@ const WipePresentation: React.FC<
 	);
 };
 
+/*
+ * @description A presentation where the entering slide slides over the exiting slide.
+ * @see [Documentation](https://www.remotion.dev/docs/transitions/presentations/wipe)
+ */
 export const wipe = (props?: WipeProps): TransitionPresentation<WipeProps> => {
 	return {
 		component: WipePresentation,

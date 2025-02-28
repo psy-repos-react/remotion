@@ -21,8 +21,8 @@ import {
 import {useZIndex} from '../state/z-index';
 import {CompositionSelectorItem} from './CompositionSelectorItem';
 import {
-	CurrentComposition,
 	CURRENT_COMPOSITION_HEIGHT,
+	CurrentComposition,
 } from './CurrentComposition';
 import {useSelectComposition} from './InitialCompositionLoader';
 
@@ -39,7 +39,12 @@ export const getKeysToExpand = (
 	parentFolderName: string | null,
 	initial: string[] = [],
 ): string[] => {
-	initial.push(openFolderKey(initialFolderName, parentFolderName));
+	initial.push(
+		openFolderKey({
+			folderName: initialFolderName,
+			parentName: parentFolderName,
+		}),
+	);
 
 	const {name, parent} = splitParentIntoNameAndParent(parentFolderName);
 	if (!name) {
@@ -66,7 +71,7 @@ export const CompositionSelector: React.FC = () => {
 	const toggleFolder = useCallback(
 		(folderName: string, parentName: string | null) => {
 			setFoldersExpanded((p) => {
-				const key = openFolderKey(folderName, parentName);
+				const key = openFolderKey({folderName, parentName});
 				const prev = p[key] ?? false;
 				const foldersExpandedState: ExpandedFoldersState = {
 					...p,
@@ -79,56 +84,50 @@ export const CompositionSelector: React.FC = () => {
 		[],
 	);
 
-	useImperativeHandle(
-		compositionSelectorRef,
-		() => {
-			return {
-				expandComposition: (compName) => {
-					const compositionToExpand = compositions.find(
-						(c) => c.id === compName,
-					);
-					if (!compositionToExpand) {
-						return;
-					}
+	useImperativeHandle(compositionSelectorRef, () => {
+		return {
+			expandComposition: (compName) => {
+				const compositionToExpand = compositions.find((c) => c.id === compName);
+				if (!compositionToExpand) {
+					return;
+				}
 
-					const {folderName, parentFolderName} = compositionToExpand;
-					if (folderName === null) {
-						return;
-					}
+				const {folderName, parentFolderName} = compositionToExpand;
+				if (folderName === null) {
+					return;
+				}
 
-					setFoldersExpanded((previousState) => {
-						const foldersExpandedState: ExpandedFoldersState = {
-							...previousState,
-						};
+				setFoldersExpanded((previousState) => {
+					const foldersExpandedState: ExpandedFoldersState = {
+						...previousState,
+					};
 
-						let currentFolder: string | null = folderName;
-						let currentParentName: string | null = parentFolderName;
-
-						while (currentFolder) {
-							if (currentParentName?.includes('/')) {
-								const splittedParentName = currentParentName.split('/');
-								currentParentName = splittedParentName.pop() ?? null;
-							}
-
-							const key = openFolderKey(currentFolder, currentParentName);
-							foldersExpandedState[key] = true;
-
-							const parentFolder = folders.find((f) => {
-								return f.name === currentParentName && currentParentName;
-							});
-							currentFolder = parentFolder?.name ?? null;
-							currentParentName = parentFolder?.parent ?? null;
-						}
-
-						persistExpandedFolders('compositions', foldersExpandedState);
-
-						return foldersExpandedState;
+					const currentFolder: string | null = folderName;
+					const currentParentName: string | null = parentFolderName;
+					const key = openFolderKey({
+						folderName: currentFolder,
+						parentName: currentParentName,
 					});
-				},
-			};
-		},
-		[compositions, folders],
-	);
+
+					const splitted = key.split('/');
+					for (let i = 0; i < splitted.length - 1; i++) {
+						const allExceptLast =
+							i === 0
+								? openFolderKey({
+										folderName: splitted.filter((s) => s !== 'no-parent')[0],
+										parentName: null,
+									})
+								: splitted.slice(0, i + 1).join('/');
+						foldersExpandedState[allExceptLast] = true;
+					}
+
+					persistExpandedFolders('compositions', foldersExpandedState);
+
+					return foldersExpandedState;
+				});
+			},
+		};
+	}, [compositions]);
 
 	const items = useMemo(() => {
 		return createFolderTree(compositions, folders, foldersExpanded);

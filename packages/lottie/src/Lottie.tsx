@@ -19,6 +19,9 @@ export const Lottie = ({
 	playbackRate,
 	style,
 	onAnimationLoaded,
+	renderer,
+	preserveAspectRatio,
+	assetsPath,
 }: LottieProps) => {
 	if (typeof animationData !== 'object') {
 		throw new Error(
@@ -29,11 +32,12 @@ export const Lottie = ({
 	validatePlaybackRate(playbackRate);
 	validateLoop(loop);
 
-	const animationRef = useRef<AnimationItem>();
+	const animationRef = useRef<AnimationItem | null>(null);
 	const currentFrameRef = useRef<number | null>(null);
 	const containerRef = useRef<HTMLDivElement>(null);
 
-	const onAnimationLoadedRef = useRef<LottieProps['onAnimationLoaded']>();
+	const onAnimationLoadedRef =
+		useRef<LottieProps['onAnimationLoaded']>(onAnimationLoaded);
 	onAnimationLoadedRef.current = onAnimationLoaded;
 
 	const [handle] = useState(() =>
@@ -51,6 +55,11 @@ export const Lottie = ({
 			container: containerRef.current,
 			autoplay: false,
 			animationData,
+			assetsPath: assetsPath ?? undefined,
+			renderer: renderer ?? 'svg',
+			rendererSettings: {
+				preserveAspectRatio: preserveAspectRatio ?? undefined,
+			},
 		});
 
 		const {current: animation} = animationRef;
@@ -80,7 +89,16 @@ export const Lottie = ({
 			animation.removeEventListener('DOMLoaded', onComplete);
 			animation.destroy();
 		};
-	}, [animationData, direction, handle, loop, playbackRate]);
+	}, [
+		animationData,
+		assetsPath,
+		direction,
+		handle,
+		loop,
+		playbackRate,
+		preserveAspectRatio,
+		renderer,
+	]);
 
 	useEffect(() => {
 		if (animationRef.current && direction) {

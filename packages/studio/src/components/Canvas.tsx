@@ -1,5 +1,4 @@
 import type {Size} from '@remotion/player';
-import {PlayerInternals} from '@remotion/player';
 import React, {
 	useCallback,
 	useContext,
@@ -8,7 +7,7 @@ import React, {
 	useState,
 } from 'react';
 import type {CanvasContent} from 'remotion';
-import {Internals} from 'remotion';
+import {Internals, watchStaticFile} from 'remotion';
 import {BACKGROUND} from '../helpers/colors';
 import type {AssetMetadata} from '../helpers/get-asset-metadata';
 import {getAssetMetadata} from '../helpers/get-asset-metadata';
@@ -23,16 +22,15 @@ import {
 	unsmoothenZoom,
 } from '../helpers/smooth-zoom';
 import {useKeybinding} from '../helpers/use-keybinding';
-import {canvasRef as ref} from '../state/canvas-ref';
+import {canvasRef} from '../state/canvas-ref';
 import {EditorShowGuidesContext} from '../state/editor-guides';
 import {EditorZoomGesturesContext} from '../state/editor-zoom-gestures';
-import {PreviewSizeContext} from '../state/preview-size';
 import EditorGuides from './EditorGuides';
 import {EditorRulers} from './EditorRuler';
 import {useIsRulerVisible} from './EditorRuler/use-is-ruler-visible';
-import {SPACING_UNIT} from './layout';
 import {VideoPreview} from './Preview';
 import {ResetZoomButton} from './ResetZoomButton';
+import {SPACING_UNIT} from './layout';
 
 const container: React.CSSProperties = {
 	flex: 1,
@@ -51,10 +49,11 @@ const resetZoom: React.CSSProperties = {
 const ZOOM_PX_FACTOR = 0.003;
 
 export const Canvas: React.FC<{
-	canvasContent: CanvasContent;
-	size: Size;
-}> = ({canvasContent, size}) => {
-	const {setSize, size: previewSize} = useContext(PreviewSizeContext);
+	readonly canvasContent: CanvasContent;
+	readonly size: Size;
+	readonly isRefreshing: boolean;
+}> = ({canvasContent, size, isRefreshing}) => {
+	const {setSize, size: previewSize} = useContext(Internals.PreviewSizeContext);
 	const {editorZoomGestures} = useContext(EditorZoomGesturesContext);
 	const keybindings = useKeybinding();
 	const config = Internals.useUnsafeVideoConfig();
@@ -106,7 +105,7 @@ export const Canvas: React.FC<{
 			e.preventDefault();
 
 			setSize((prevSize) => {
-				const scale = PlayerInternals.calculateScale({
+				const scale = Internals.calculateScale({
 					canvasSize: size,
 					compositionHeight: contentDimensions.height,
 					compositionWidth: contentDimensions.width,
@@ -185,7 +184,7 @@ export const Canvas: React.FC<{
 	);
 
 	useEffect(() => {
-		const {current} = ref;
+		const {current} = canvasRef;
 		if (!current) {
 			return;
 		}
@@ -221,7 +220,7 @@ export const Canvas: React.FC<{
 		}
 
 		setSize((prevSize) => {
-			const scale = PlayerInternals.calculateScale({
+			const scale = Internals.calculateScale({
 				canvasSize: size,
 				compositionHeight: contentDimensions.height,
 				compositionWidth: contentDimensions.width,
@@ -247,7 +246,7 @@ export const Canvas: React.FC<{
 		}
 
 		setSize((prevSize) => {
-			const scale = PlayerInternals.calculateScale({
+			const scale = Internals.calculateScale({
 				canvasSize: size,
 				compositionHeight: contentDimensions.height,
 				compositionWidth: contentDimensions.width,
@@ -307,9 +306,25 @@ export const Canvas: React.FC<{
 			return;
 		}
 
-		const metadata = await getAssetMetadata(canvasContent);
+		const metadata = await getAssetMetadata(
+			canvasContent,
+			canvasContent.type === 'asset',
+		);
 		setAssetResolution(metadata);
 	}, [canvasContent]);
+
+	useEffect(() => {
+		if (canvasContent.type !== 'asset') {
+			return;
+		}
+
+		const file = watchStaticFile(canvasContent.asset, () => {
+			fetchMetadata();
+		});
+		return () => {
+			file.cancel();
+		};
+	}, [canvasContent, fetchMetadata]);
 
 	useEffect(() => {
 		fetchMetadata();
@@ -317,13 +332,14 @@ export const Canvas: React.FC<{
 
 	return (
 		<>
-			<div ref={ref} style={container}>
+			<div ref={canvasRef} style={container}>
 				{size ? (
 					<VideoPreview
 						canvasContent={canvasContent}
 						contentDimensions={contentDimensions}
 						canvasSize={size}
 						assetMetadata={assetResolution}
+						isRefreshing={isRefreshing}
 					/>
 				) : null}
 				{isFit ? null : (
@@ -344,7 +360,7 @@ export const Canvas: React.FC<{
 					contentDimensions={contentDimensions}
 					canvasSize={size}
 					assetMetadata={assetResolution}
-					containerRef={ref}
+					containerRef={canvasRef}
 				/>
 			)}
 		</>

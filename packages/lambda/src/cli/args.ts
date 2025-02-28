@@ -1,9 +1,8 @@
 import {CliInternals} from '@remotion/cli';
 import type {BrowserSafeApis} from '@remotion/renderer/client';
-import type {DeleteAfter} from '../client';
+import type {AwsRegion, DeleteAfter, RuntimePreference} from '../client';
 
-import type {AwsRegion} from '../pricing/aws-regions';
-import type {Privacy} from '../shared/constants';
+import type {Privacy} from '@remotion/serverless';
 
 type LambdaCommandLineOptions = {
 	help: boolean;
@@ -22,7 +21,7 @@ type LambdaCommandLineOptions = {
 	['disable-chunk-optimization']: boolean;
 	['save-browser-logs']: boolean;
 	['disable-cloudwatch']: boolean;
-	['enable-lambda-insights']: boolean;
+	[BrowserSafeApis.options.enableLambdaInsights.cliFlag]: boolean;
 	['max-retries']?: number;
 	['frames-per-lambda']?: number;
 	['concurrency-per-lambda']?: number;
@@ -37,12 +36,18 @@ type LambdaCommandLineOptions = {
 	['force-bucket-name']: string | undefined;
 	[BrowserSafeApis.options.deleteAfterOption.cliFlag]: DeleteAfter | undefined;
 	[BrowserSafeApis.options.folderExpiryOption.cliFlag]: boolean | undefined;
+	['vpc-subnet-ids']: string | undefined;
+	['vpc-security-group-ids']: string | undefined;
+	['compatible-only']: boolean;
+	['force-path-style']: boolean;
+	['runtime-preference']: RuntimePreference;
 };
 
 export const parsedLambdaCli = CliInternals.minimist<LambdaCommandLineOptions>(
 	process.argv.slice(2),
 	{
 		boolean: CliInternals.BooleanFlags,
+		string: ['_'],
 	},
 );
 

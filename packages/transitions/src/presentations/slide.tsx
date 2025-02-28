@@ -43,7 +43,7 @@ const SlidePresentation: React.FC<
 					};
 				case 'from-right':
 					return {
-						transform: `translateX(-${presentationProgress * 100}%)`,
+						transform: `translateX(${-presentationProgress * 100}%)`,
 					};
 				case 'from-top':
 					return {
@@ -51,7 +51,7 @@ const SlidePresentation: React.FC<
 					};
 				case 'from-bottom':
 					return {
-						transform: `translateY(-${presentationProgress * 100}%)`,
+						transform: `translateY(${-presentationProgress * 100}%)`,
 					};
 				default:
 					throw new Error(`Invalid direction: ${direction}`);
@@ -98,6 +98,10 @@ const SlidePresentation: React.FC<
 	return <AbsoluteFill style={style}>{children}</AbsoluteFill>;
 };
 
+/*
+ * @description Implements a sliding transition for presentation components where the entering slide pushes the outgoing slide in a specified direction.
+ * @see [Documentation](https://www.remotion.dev/docs/transitions/presentations/slide)
+ */
 export const slide = (
 	props?: SlideProps,
 ): TransitionPresentation<SlideProps> => {

@@ -18,15 +18,18 @@ export type {
 	RenderingProgressInput,
 	RenderJob,
 	RenderJobWithCleanup,
-	RenderStep,
 	RequiredChromiumOptions,
 	StitchingProgressInput,
 	UiOpenGlOptions,
 } from '@remotion/studio-shared';
 
 import {AnsiDiff} from './ansi-diff';
+import {openBrowser} from './better-opn';
+import {parseAndApplyCodemod} from './codemods/duplicate-composition';
 import {installFileWatcher} from './file-watcher';
 import {getLatestRemotionVersion} from './get-latest-remotion-version';
+import {getInstalledDependencies} from './helpers/get-installed-dependencies';
+import {getInstallCommand} from './helpers/install-command';
 import {
 	getMaxTimelineTracks,
 	setMaxTimelineTracks,
@@ -51,4 +54,8 @@ export const StudioServerInternals = {
 	installFileWatcher,
 	AnsiDiff,
 	formatBytes,
+	parseAndApplyCodemod,
+	openBrowser,
+	getInstalledDependencies,
+	getInstallCommand,
 };

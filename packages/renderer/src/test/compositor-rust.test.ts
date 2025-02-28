@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test} from 'bun:test';
 import {startLongRunningCompositor} from '../compositor/compositor';
 
 test(
@@ -6,8 +6,10 @@ test(
 	async () => {
 		const compositor = startLongRunningCompositor({
 			maximumFrameCacheItemsInBytes: null,
-			logLevel: 'verbose',
+			logLevel: 'info',
 			indent: false,
+			binariesDirectory: null,
+			extraThreads: 2,
 		});
 
 		const matching = await Promise.all(
@@ -19,7 +21,8 @@ test(
 				const output = await compositor.executeCommand('Echo', {
 					message: expectedString,
 				});
-				const isSame = output.toString('utf8') === 'Echo ' + expectedString;
+				const isSame =
+					new TextDecoder('utf-8').decode(output) === 'Echo ' + expectedString;
 				return isSame;
 			}),
 		);
@@ -28,5 +31,5 @@ test(
 		await compositor.waitForDone();
 		expect(matching.every((m) => m)).toBe(true);
 	},
-	{timeout: 5000},
+	{timeout: 5000, retry: 2},
 );

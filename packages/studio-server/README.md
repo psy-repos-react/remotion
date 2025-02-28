@@ -1,3 +1,7 @@
-# `@remotion/studio-server`
-
-Right now the APIs in here are not meant for public consumption.
+# @remotion/studio-server
+ 
+Run a Remotion Studio with a server backend
+ 
+## Usage
+ 
+This is an internal package and has no documentation.

@@ -2,8 +2,8 @@ import React, {useCallback, useEffect} from 'react';
 import {Button} from '../../components/Button';
 import {BLUE} from '../../helpers/colors';
 import {useKeybinding} from '../../helpers/use-keybinding';
-import type {THelpLink} from './get-help-link';
 import {ShortcutHint} from './ShortcutHint';
+import type {THelpLink} from './get-help-link';
 
 const buttonStyle: React.CSSProperties = {
 	backgroundColor: BLUE,
@@ -11,8 +11,8 @@ const buttonStyle: React.CSSProperties = {
 };
 
 export const HelpLink: React.FC<{
-	canHaveKeyboardShortcuts: boolean;
-	link: THelpLink;
+	readonly canHaveKeyboardShortcuts: boolean;
+	readonly link: THelpLink;
 }> = ({canHaveKeyboardShortcuts, link}) => {
 	const openLink = useCallback(() => {
 		window.open(link.url, '_blank');

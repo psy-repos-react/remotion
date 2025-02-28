@@ -2,13 +2,13 @@ import type {ChangeEvent} from 'react';
 import React, {useCallback} from 'react';
 import {Checkbox} from '../Checkbox';
 import {Spacing} from '../layout';
-import {label, optionRow, rightRow} from './layout';
 import {OptionExplainerBubble} from './OptionExplainerBubble';
+import {label, optionRow, rightRow} from './layout';
 
 export const MutedSetting: React.FC<{
-	muted: boolean;
-	setMuted: React.Dispatch<React.SetStateAction<boolean>>;
-	enforceAudioTrack: boolean;
+	readonly muted: boolean;
+	readonly setMuted: React.Dispatch<React.SetStateAction<boolean>>;
+	readonly enforceAudioTrack: boolean;
 }> = ({muted, setMuted, enforceAudioTrack}) => {
 	const onMutedChanged = useCallback(
 		(e: ChangeEvent<HTMLInputElement>) => {
@@ -22,7 +22,7 @@ export const MutedSetting: React.FC<{
 			<div style={label}>
 				Muted
 				<Spacing x={0.5} />
-				<OptionExplainerBubble id="muteOption" />
+				<OptionExplainerBubble id="mutedOption" />
 			</div>
 			<Spacing x={0.25} />
 

@@ -1,7 +1,7 @@
 import type React from 'react';
 import {useContext, useEffect} from 'react';
 import {Internals} from 'remotion';
-import {TimelineZoomCtx, TIMELINE_MIN_ZOOM} from '../../state/timeline-zoom';
+import {TIMELINE_MIN_ZOOM, TimelineZoomCtx} from '../../state/timeline-zoom';
 import {
 	getCurrentDuration,
 	getCurrentFrame,
@@ -40,7 +40,7 @@ export const TimelinePlayCursorSyncer: React.FC = () => {
 			? canvasContent.compositionId
 			: null;
 	const zoom = compositionId
-		? zoomMap[compositionId] ?? TIMELINE_MIN_ZOOM
+		? (zoomMap[compositionId] ?? TIMELINE_MIN_ZOOM)
 		: null;
 
 	if (zoom && video) {

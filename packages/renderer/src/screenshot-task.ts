@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import type {ClipRegion} from 'remotion/no-react';
 import type {Page} from './browser/BrowserPage';
 import type {StillImageFormat} from './image-format';
 import {startPerfMeasure, stopPerfMeasure} from './perf';
@@ -12,7 +11,7 @@ export const screenshotTask = async ({
 	width,
 	path,
 	jpegQuality,
-	clipRegion,
+	scale,
 }: {
 	page: Page;
 	format: StillImageFormat;
@@ -21,7 +20,7 @@ export const screenshotTask = async ({
 	omitBackground: boolean;
 	width: number;
 	height: number;
-	clipRegion: ClipRegion | null;
+	scale: number;
 }): Promise<Buffer | string> => {
 	const client = page._client();
 	const target = page.target();
@@ -55,27 +54,31 @@ export const screenshotTask = async ({
 			});
 			result = res.value;
 		} else {
+			// We find that there is a 0.1% framedrop when rendering under memory pressure
+			// which can be circumvented by disabling this option on Lambda.
+			// To be determined: Is this a problem with Lambda, or the Chrome version
+			// we are using on Lambda?
+			// We already found out that the problem is not a general Linux problem.
+
+			// However, if `fromSurface` is false, the screenshot is limited to 8192x8192 pixels.
+			// If the image is larger, always use `fromSurface: true`.
+			const fromSurface =
+				!process.env.DISABLE_FROM_SURFACE || height > 8192 || width > 8192;
+			const scaleFactor = fromSurface ? 1 : scale;
+
 			const {value} = await client.send('Page.captureScreenshot', {
 				format,
 				quality: jpegQuality,
-				clip:
-					clipRegion !== null && clipRegion !== 'hide'
-						? {
-								x: clipRegion.x,
-								y: clipRegion.y,
-								height: clipRegion.height,
-								scale: 1,
-								width: clipRegion.width,
-							}
-						: {
-								x: 0,
-								y: 0,
-								height,
-								scale: 1,
-								width,
-							},
+				clip: {
+					x: 0,
+					y: 0,
+					height: height * scaleFactor,
+					scale: 1,
+					width: width * scaleFactor,
+				},
 				captureBeyondViewport: true,
 				optimizeForSpeed: true,
+				fromSurface,
 			});
 			result = value;
 		}

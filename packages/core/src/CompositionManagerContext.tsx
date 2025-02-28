@@ -7,7 +7,13 @@ import type {VideoConfig} from './video-config.js';
 
 export type BaseMetadata = Pick<
 	VideoConfig,
-	'durationInFrames' | 'fps' | 'props' | 'height' | 'width' | 'defaultCodec'
+	| 'durationInFrames'
+	| 'fps'
+	| 'props'
+	| 'height'
+	| 'width'
+	| 'defaultCodec'
+	| 'defaultOutName'
 >;
 
 export type CanvasContent =
@@ -32,6 +38,10 @@ export type CompositionManagerContext = {
 	>(
 		comp: TComposition<Schema, Props>,
 	) => void;
+	updateCompositionDefaultProps: (
+		id: string,
+		newDefaultProps: Record<string, unknown>,
+	) => void;
 	unregisterComposition: (name: string) => void;
 	registerFolder: (name: string, parent: string | null) => void;
 	unregisterFolder: (name: string, parent: string | null) => void;
@@ -49,6 +59,7 @@ export const CompositionManager = createContext<CompositionManagerContext>({
 	registerFolder: () => undefined,
 	unregisterFolder: () => undefined,
 	setCurrentCompositionMetadata: () => undefined,
+	updateCompositionDefaultProps: () => undefined,
 	folders: [],
 	currentCompositionMetadata: null,
 	canvasContent: null,

@@ -2,25 +2,36 @@ import {startLongRunningCompositor} from './compositor/compositor';
 import type {
 	GetSilentPartsResponse,
 	GetSilentPartsResponseRust,
+	SilentPart,
 	SilentParts,
 } from './compositor/payloads';
 import type {LogLevel} from './log-level';
 
+export type {SilentPart};
+
+/*
+ * @description Gets the silent parts of a video or audio in Node.js. Useful for cutting out silence from a video.
+ * @see [Documentation](https://www.remotion.dev/docs/renderer/get-silent-parts)
+ */
 export const getSilentParts = async ({
 	src,
 	noiseThresholdInDecibels: passedNoiseThresholdInDecibels,
 	minDurationInSeconds: passedMinDuration,
 	logLevel,
+	binariesDirectory,
 }: {
 	src: string;
 	minDurationInSeconds?: number;
 	logLevel?: LogLevel;
 	noiseThresholdInDecibels?: number;
+	binariesDirectory?: string | null;
 }): Promise<GetSilentPartsResponse> => {
 	const compositor = startLongRunningCompositor({
 		maximumFrameCacheItemsInBytes: null,
 		logLevel: logLevel ?? 'info',
 		indent: false,
+		binariesDirectory: binariesDirectory ?? null,
+		extraThreads: 0,
 	});
 
 	const minDurationInSeconds = passedMinDuration ?? 1;
@@ -58,7 +69,7 @@ export const getSilentParts = async ({
 	});
 
 	const response = JSON.parse(
-		res.toString('utf-8'),
+		new TextDecoder('utf-8').decode(res),
 	) as GetSilentPartsResponseRust;
 
 	await compositor.finishCommands();

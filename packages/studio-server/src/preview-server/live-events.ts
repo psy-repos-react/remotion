@@ -1,3 +1,4 @@
+import type {LogLevel} from '@remotion/renderer';
 import type {EventSourceEvent} from '@remotion/studio-shared';
 import type {
 	IncomingMessage,
@@ -15,15 +16,16 @@ type Client = {
 export type LiveEventsServer = {
 	sendEventToClient: (event: EventSourceEvent) => void;
 	router: (request: IncomingMessage, response: ServerResponse) => void;
+	closeConnections: () => Promise<void>;
 };
 
 const serializeMessage = (message: EventSourceEvent) => {
 	return `data: ${JSON.stringify(message)}\n\n`;
 };
 
-let printPortMessageTimeout: NodeJS.Timeout | null = null;
+let printPortMessageTimeout: Timer | null = null;
 
-export const makeLiveEventsRouter = (): LiveEventsServer => {
+export const makeLiveEventsRouter = (logLevel: LogLevel): LiveEventsServer => {
 	let clients: Client[] = [];
 
 	const router = (request: IncomingMessage, response: ServerResponse) => {
@@ -63,7 +65,7 @@ export const makeLiveEventsRouter = (): LiveEventsServer => {
 				}
 
 				printPortMessageTimeout = setTimeout(() => {
-					printServerReadyComment('To restart');
+					printServerReadyComment('To restart', logLevel);
 				}, 2500);
 			}
 		});
@@ -78,6 +80,17 @@ export const makeLiveEventsRouter = (): LiveEventsServer => {
 	return {
 		sendEventToClient,
 		router,
+		closeConnections: () => {
+			return Promise.all(
+				clients.map((client) => {
+					return new Promise<void>((resolve) => {
+						client.response.end(() => {
+							resolve();
+						});
+					});
+				}),
+			).then(() => undefined);
+		},
 	};
 };
 
@@ -101,4 +114,7 @@ export const waitForLiveEventsListener = (): Promise<LiveEventsServer> => {
 export const setLiveEventsListener = (listener: LiveEventsServer) => {
 	liveEventsListener = listener;
 	waiters.forEach((w) => w(listener));
+	return () => {
+		liveEventsListener = null;
+	};
 };

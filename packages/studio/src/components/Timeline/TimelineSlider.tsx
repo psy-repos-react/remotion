@@ -8,10 +8,10 @@ import React, {
 } from 'react';
 import {Internals, useVideoConfig} from 'remotion';
 import {getXPositionOfItemInTimelineImperatively} from '../../helpers/get-left-of-timeline-slider';
-import {getCurrentDuration} from './imperative-state';
-import {sliderAreaRef, timelineVerticalScroll} from './timeline-refs';
 import {TimelineSliderHandle} from './TimelineSliderHandle';
 import {TimelineWidthContext} from './TimelineWidthProvider';
+import {getCurrentDuration} from './imperative-state';
+import {sliderAreaRef, timelineVerticalScroll} from './timeline-refs';
 
 const container: React.CSSProperties = {
 	position: 'absolute',
@@ -63,26 +63,22 @@ const Inner: React.FC = () => {
 		};
 	}, [timelinePosition, videoConfig.durationInFrames, timelineWidth]);
 
-	useImperativeHandle(
-		redrawTimelineSliderFast,
-		() => {
-			return {
-				draw: (frame, width?: number) => {
-					const {current} = ref;
-					if (!current) {
-						throw new Error('unexpectedly did not have ref to timelineslider');
-					}
+	useImperativeHandle(redrawTimelineSliderFast, () => {
+		return {
+			draw: (frame, width?: number) => {
+				const {current} = ref;
+				if (!current) {
+					throw new Error('unexpectedly did not have ref to timelineslider');
+				}
 
-					current.style.transform = `translateX(${getXPositionOfItemInTimelineImperatively(
-						frame,
-						getCurrentDuration(),
-						width ?? (sliderAreaRef.current?.clientWidth as number) ?? 0,
-					)}px)`;
-				},
-			};
-		},
-		[],
-	);
+				current.style.transform = `translateX(${getXPositionOfItemInTimelineImperatively(
+					frame,
+					getCurrentDuration(),
+					width ?? (sliderAreaRef.current?.clientWidth as number) ?? 0,
+				)}px)`;
+			},
+		};
+	}, []);
 
 	useEffect(() => {
 		const currentRef = ref.current;

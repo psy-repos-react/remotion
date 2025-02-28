@@ -1,7 +1,7 @@
 import {interpolate} from 'remotion';
 import {TIMELINE_PADDING} from '../../helpers/timeline-layout';
-import {scrollableRef} from './timeline-refs';
 import {redrawTimelineSliderFast} from './TimelineSlider';
+import {scrollableRef} from './timeline-refs';
 
 export const canScrollTimelineIntoDirection = () => {
 	const current = scrollableRef.current as HTMLDivElement;
@@ -271,7 +271,7 @@ export const getFrameFromX = ({
 		interpolate(
 			pos,
 			[0, width - TIMELINE_PADDING * 2],
-			[0, durationInFrames - 1 ?? 0],
+			[0, durationInFrames - 1],
 			{
 				extrapolateLeft: extrapolate,
 				extrapolateRight: extrapolate,

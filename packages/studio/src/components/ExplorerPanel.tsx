@@ -39,7 +39,9 @@ export const explorerSidebarTabs = createRef<{
 	selectCompositionPanel: () => void;
 }>();
 
-export const ExplorerPanel: React.FC<{}> = () => {
+export const ExplorerPanel: React.FC<{
+	readOnlyStudio: boolean;
+}> = ({readOnlyStudio}) => {
 	const [panel, setPanel] = useState<OptionsSidebarPanel>(() =>
 		getSelectedPanel(),
 	);
@@ -53,22 +55,18 @@ export const ExplorerPanel: React.FC<{}> = () => {
 		persistSelectedOptionsSidebarPanel('assets');
 	}, []);
 
-	useImperativeHandle(
-		explorerSidebarTabs,
-		() => {
-			return {
-				selectAssetsPanel: () => {
-					setPanel('assets');
-					persistSelectedOptionsSidebarPanel('assets');
-				},
-				selectCompositionPanel: () => {
-					setPanel('compositions');
-					persistSelectedOptionsSidebarPanel('compositions');
-				},
-			};
-		},
-		[],
-	);
+	useImperativeHandle(explorerSidebarTabs, () => {
+		return {
+			selectAssetsPanel: () => {
+				setPanel('assets');
+				persistSelectedOptionsSidebarPanel('assets');
+			},
+			selectCompositionPanel: () => {
+				setPanel('compositions');
+				persistSelectedOptionsSidebarPanel('compositions');
+			},
+		};
+	}, []);
 
 	return (
 		<div style={container} className="css-reset">
@@ -85,7 +83,11 @@ export const ExplorerPanel: React.FC<{}> = () => {
 					</Tab>
 				</Tabs>
 			</div>
-			{panel === 'compositions' ? <CompositionSelector /> : <AssetSelector />}
+			{panel === 'compositions' ? (
+				<CompositionSelector />
+			) : (
+				<AssetSelector readOnlyStudio={readOnlyStudio} />
+			)}
 		</div>
 	);
 };

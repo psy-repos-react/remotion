@@ -6,6 +6,7 @@ import React, {
 	useMemo,
 	useRef,
 } from 'react';
+import type {CurrentScaleContextType} from 'remotion';
 import {Internals} from 'remotion';
 import {
 	calculateCanvasTransformation,
@@ -14,9 +15,10 @@ import {
 	calculateOuterStyle,
 } from './calculate-scale.js';
 import {ErrorBoundary} from './error-boundary.js';
-import {PLAYER_CSS_CLASSNAME} from './player-css-classname.js';
+import {playerCssClassname} from './player-css-classname.js';
 import type {ThumbnailMethods} from './player-methods.js';
 import type {ErrorFallback, RenderLoading} from './PlayerUI.js';
+import {useBufferStateEmitter} from './use-buffer-state-emitter.js';
 import {useThumbnail} from './use-thumbnail.js';
 import {IS_NODE} from './utils/is-node.js';
 import {useElementSize} from './utils/use-element-size.js';
@@ -33,13 +35,28 @@ const doesReactVersionSupportSuspense = parseInt(reactVersion, 10) >= 18;
 const ThumbnailUI: React.ForwardRefRenderFunction<
 	ThumbnailMethods,
 	{
-		inputProps: Record<string, unknown>;
-		style?: React.CSSProperties;
-		errorFallback: ErrorFallback;
-		renderLoading: RenderLoading | undefined;
-		className: string | undefined;
+		readonly inputProps: Record<string, unknown>;
+		readonly style?: React.CSSProperties;
+		readonly errorFallback: ErrorFallback;
+		readonly renderLoading: RenderLoading | undefined;
+		readonly className: string | undefined;
+		readonly overflowVisible: boolean;
+		readonly overrideInternalClassName: string | undefined;
+		readonly noSuspense: boolean;
 	}
-> = ({style, inputProps, errorFallback, renderLoading, className}, ref) => {
+> = (
+	{
+		style,
+		inputProps,
+		errorFallback,
+		renderLoading,
+		className,
+		overflowVisible,
+		noSuspense,
+		overrideInternalClassName,
+	},
+	ref,
+) => {
 	const config = Internals.useUnsafeVideoConfig();
 	const video = Internals.useVideo();
 	const container = useRef<HTMLDivElement>(null);
@@ -64,27 +81,31 @@ const ThumbnailUI: React.ForwardRefRenderFunction<
 
 	const thumbnail = useThumbnail();
 
-	useImperativeHandle(
-		ref,
-		() => {
-			const methods: ThumbnailMethods = {
-				getContainerNode: () => container.current,
-				getScale: () => scale,
-			};
-			return Object.assign(thumbnail.emitter, methods);
-		},
-		[scale, thumbnail.emitter],
-	);
+	useBufferStateEmitter(thumbnail.emitter);
+
+	useImperativeHandle(ref, () => {
+		const methods: ThumbnailMethods = {
+			getContainerNode: () => container.current,
+			getScale: () => scale,
+		};
+		return Object.assign(thumbnail.emitter, methods);
+	}, [scale, thumbnail.emitter]);
 
 	const VideoComponent = video ? video.component : null;
 
 	const outerStyle: React.CSSProperties = useMemo(() => {
-		return calculateOuterStyle({config, style, canvasSize});
-	}, [canvasSize, config, style]);
+		return calculateOuterStyle({
+			config,
+			style,
+			canvasSize,
+			overflowVisible,
+			layout,
+		});
+	}, [canvasSize, config, layout, overflowVisible, style]);
 
 	const outer: React.CSSProperties = useMemo(() => {
-		return calculateOuter({config, layout, scale});
-	}, [config, layout, scale]);
+		return calculateOuter({config, layout, scale, overflowVisible});
+	}, [config, layout, overflowVisible, scale]);
 
 	const containerStyle: React.CSSProperties = useMemo(() => {
 		return calculateContainerStyle({
@@ -92,8 +113,9 @@ const ThumbnailUI: React.ForwardRefRenderFunction<
 			config,
 			layout,
 			scale,
+			overflowVisible,
 		});
-	}, [canvasSize, config, layout, scale]);
+	}, [canvasSize, config, layout, overflowVisible, scale]);
 
 	const onError = useCallback(
 		(error: Error) => {
@@ -103,17 +125,22 @@ const ThumbnailUI: React.ForwardRefRenderFunction<
 		[thumbnail.emitter],
 	);
 
-	const rootRef = useRef<ThumbnailMethods>(null);
-	useImperativeHandle(ref, () => rootRef.current as ThumbnailMethods, []);
-
 	const loadingMarkup = useMemo(() => {
 		return renderLoading
 			? renderLoading({
 					height: outerStyle.height as number,
 					width: outerStyle.width as number,
+					isBuffering: false,
 				})
 			: null;
 	}, [outerStyle.height, outerStyle.width, renderLoading]);
+
+	const currentScaleContext: CurrentScaleContextType = useMemo(() => {
+		return {
+			type: 'scale',
+			scale,
+		};
+	}, [scale]);
 
 	if (!config) {
 		return null;
@@ -121,17 +148,25 @@ const ThumbnailUI: React.ForwardRefRenderFunction<
 
 	const content = (
 		<div style={outer}>
-			<div style={containerStyle} className={PLAYER_CSS_CLASSNAME}>
+			<div
+				style={containerStyle}
+				className={playerCssClassname(overrideInternalClassName)}
+			>
 				{VideoComponent ? (
 					<ErrorBoundary onError={onError} errorFallback={errorFallback}>
-						<VideoComponent {...(video?.props ?? {})} {...(inputProps ?? {})} />
+						<Internals.CurrentScaleContext.Provider value={currentScaleContext}>
+							<VideoComponent
+								{...(video?.props ?? {})}
+								{...(inputProps ?? {})}
+							/>
+						</Internals.CurrentScaleContext.Provider>
 					</ErrorBoundary>
 				) : null}
 			</div>
 		</div>
 	);
 
-	if (IS_NODE && !doesReactVersionSupportSuspense) {
+	if (noSuspense || (IS_NODE && !doesReactVersionSupportSuspense)) {
 		return (
 			<div ref={container} style={outerStyle} className={className}>
 				{content}

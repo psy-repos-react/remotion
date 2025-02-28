@@ -1,11 +1,16 @@
 import type * as ff from '@google-cloud/functions-framework';
 import {Storage} from '@google-cloud/storage';
-import type {ChromiumOptions, RenderMediaOnProgress} from '@remotion/renderer';
+import type {
+	ChromiumOptions,
+	OnArtifact,
+	RenderMediaOnProgress,
+} from '@remotion/renderer';
 import {RenderInternals} from '@remotion/renderer';
 import {NoReactInternals} from 'remotion/no-react';
 import {VERSION} from 'remotion/version';
 import {randomHash} from '../shared/random-hash';
 import {getCompositionFromBody} from './helpers/get-composition-from-body';
+import {getDownloadBehaviorSetting} from './helpers/get-download-behavior-setting';
 import type {
 	CloudRunPayloadType,
 	RenderMediaOnCloudrunOutput,
@@ -32,7 +37,7 @@ export const renderMediaSingleThread = async (
 		);
 	}
 
-	const renderId = randomHash({randomInTests: true});
+	const renderId = body.renderIdOverride ?? randomHash({randomInTests: true});
 
 	try {
 		const composition = await getCompositionFromBody(body);
@@ -42,10 +47,70 @@ export const renderMediaSingleThread = async (
 			body.audioCodec,
 		)}`;
 		const tempFilePath = `/tmp/${defaultOutName}`;
-		let previousProgress = 2;
-		const onProgress: RenderMediaOnProgress = ({progress}) => {
+
+		let previousProgress = 0.02;
+		let lastWebhookProgress = 0;
+
+		let writingProgress = Promise.resolve();
+
+		const onProgress: RenderMediaOnProgress = ({
+			progress,
+			renderedFrames,
+			encodedFrames,
+		}) => {
 			if (previousProgress !== progress) {
-				res.write(JSON.stringify({onProgress: progress}) + '\n');
+				RenderInternals.Log.info(
+					{indent: false, logLevel: body.logLevel},
+					'Render progress:',
+					renderedFrames,
+					'frames rendered',
+					encodedFrames,
+					'frames encoded',
+					Math.round(progress * 100),
+					'%',
+				);
+
+				writingProgress = writingProgress.then(() => {
+					return new Promise((resolve) => {
+						res.write(JSON.stringify({onProgress: progress}) + '\n', () => {
+							resolve();
+						});
+					});
+				});
+
+				if (body.renderStatusWebhook) {
+					const interval =
+						body.renderStatusWebhook.webhookProgressInterval ?? 0.1; // Default 10% intervals
+					const shouldCallWebhook =
+						progress === 1 || // Always call on completion
+						lastWebhookProgress === 0 || // Always call first time
+						progress - lastWebhookProgress >= interval; // Call if interval exceeded
+
+					if (shouldCallWebhook) {
+						fetch(body.renderStatusWebhook.url, {
+							method: 'POST',
+							headers: {
+								...body.renderStatusWebhook.headers,
+								'Content-Type': 'application/json',
+							},
+							body: JSON.stringify({
+								...body.renderStatusWebhook.data,
+								progress,
+								renderId,
+								renderedFrames,
+								encodedFrames,
+							}),
+						}).catch((err) => {
+							RenderInternals.Log.warn(
+								{indent: false, logLevel: body.logLevel},
+								'Failed to call webhook:',
+								err,
+							);
+						});
+						lastWebhookProgress = progress;
+					}
+				}
+
 				previousProgress = progress;
 			}
 		};
@@ -57,6 +122,10 @@ export const renderMediaSingleThread = async (
 			// Override the `null` value, which might come from CLI with swANGLE
 			gl: body.chromiumOptions?.gl ?? 'swangle',
 			enableMultiProcessOnLinux: true,
+		};
+
+		const onArtifact: OnArtifact = () => {
+			throw new Error('Emitting artifacts is not supported in Cloud Run');
 		};
 
 		await RenderInternals.internalRenderMedia({
@@ -78,7 +147,7 @@ export const renderMediaSingleThread = async (
 				}).serializedString,
 			jpegQuality: body.jpegQuality ?? RenderInternals.DEFAULT_JPEG_QUALITY,
 			audioCodec: body.audioCodec,
-			audioBitrate: body.audioBitrate,
+			audioBitrate: body.audioBitrate ?? null,
 			videoBitrate: body.videoBitrate,
 			encodingMaxRate: body.encodingMaxRate,
 			encodingBufferSize: body.encodingBufferSize,
@@ -88,7 +157,7 @@ export const renderMediaSingleThread = async (
 				body.imageFormat ?? RenderInternals.DEFAULT_VIDEO_IMAGE_FORMAT,
 			scale: body.scale,
 			proResProfile: body.proResProfile ?? undefined,
-			x264Preset: body.x264Preset ?? undefined,
+			x264Preset: body.x264Preset,
 			everyNthFrame: body.everyNthFrame,
 			numberOfGifLoops: body.numberOfGifLoops,
 			onProgress,
@@ -117,9 +186,20 @@ export const renderMediaSingleThread = async (
 			puppeteerInstance: undefined,
 			server: undefined,
 			offthreadVideoCacheSizeInBytes: body.offthreadVideoCacheSizeInBytes,
+			offthreadVideoThreads: body.offthreadVideoThreads,
 			colorSpace: body.colorSpace,
 			repro: false,
-			finishRenderProgress: () => undefined,
+			binariesDirectory: null,
+			separateAudioTo: null,
+			forSeamlessAacConcatenation: false,
+			compositionStart: 0,
+			onBrowserDownload: () => {
+				throw new Error('Should not download a browser in Cloud Run');
+			},
+			onArtifact,
+			metadata: body.metadata ?? null,
+			hardwareAcceleration: 'disable',
+			chromeMode: 'headless-shell',
 		});
 
 		const storage = new Storage();
@@ -131,6 +211,7 @@ export const renderMediaSingleThread = async (
 			.upload(tempFilePath, {
 				destination: `renders/${renderId}/${body.outName ?? defaultOutName}`,
 				predefinedAcl: publicUpload ? 'publicRead' : 'projectPrivate',
+				metadata: getDownloadBehaviorSetting(body.downloadBehavior),
 			});
 
 		const uploadedFile = uploadedResponse[0];
@@ -139,13 +220,17 @@ export const renderMediaSingleThread = async (
 			type: 'success',
 			publicUrl: publicUpload ? uploadedFile.publicUrl() : null,
 			cloudStorageUri: uploadedFile.cloudStorageURI.href,
-			size: renderMetadata[0].size,
+			size: renderMetadata[0].size as number,
 			bucketName: body.outputBucket,
 			renderId,
 			privacy: publicUpload ? 'public-read' : 'project-private',
 		};
 
-		RenderInternals.Log.info('Render Completed:', responseData);
+		RenderInternals.Log.info(
+			{indent: false, logLevel: body.logLevel},
+			'Render Completed:',
+			responseData,
+		);
 		res.end(JSON.stringify({response: responseData}));
 	} catch (err) {
 		await writeCloudrunError({

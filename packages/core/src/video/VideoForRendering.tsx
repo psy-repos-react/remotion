@@ -8,6 +8,8 @@ import React, {
 	useMemo,
 	useRef,
 } from 'react';
+import {RenderAssetManager} from '../RenderAssetManager.js';
+import {SequenceContext} from '../SequenceContext.js';
 import {getAbsoluteSrc} from '../absolute-src.js';
 import {
 	useFrameForVolumeProp,
@@ -16,19 +18,19 @@ import {
 import {continueRender, delayRender} from '../delay-render.js';
 import {getRemotionEnvironment} from '../get-remotion-environment.js';
 import {isApproximatelyTheSame} from '../is-approximately-the-same.js';
+import {useLogLevel, useMountTime} from '../log-level-context.js';
 import {random} from '../random.js';
-import {RenderAssetManager} from '../RenderAssetManager.js';
-import {SequenceContext} from '../SequenceContext.js';
 import {useTimelinePosition} from '../timeline-position-state.js';
 import {useCurrentFrame} from '../use-current-frame.js';
 import {useUnsafeVideoConfig} from '../use-unsafe-video-config.js';
 import {evaluateVolume} from '../volume-prop.js';
 import {getMediaTime} from './get-current-time.js';
-import type {RemotionVideoProps} from './props.js';
+import type {OnVideoFrame, RemotionVideoProps} from './props';
 import {seekToTimeMultipleUntilRight} from './seek-until-right.js';
 
 type VideoForRenderingProps = RemotionVideoProps & {
-	onDuration: (src: string, durationInSeconds: number) => void;
+	readonly onDuration: (src: string, durationInSeconds: number) => void;
+	readonly onVideoFrame: null | OnVideoFrame;
 };
 
 const VideoForRenderingForwardFunction: React.ForwardRefRenderFunction<
@@ -44,6 +46,9 @@ const VideoForRenderingForwardFunction: React.ForwardRefRenderFunction<
 		toneFrequency,
 		name,
 		acceptableTimeShiftInSeconds,
+		delayRenderRetries,
+		delayRenderTimeoutInMilliseconds,
+		loopVolumeCurveBehavior,
 		...props
 	},
 	ref,
@@ -51,12 +56,16 @@ const VideoForRenderingForwardFunction: React.ForwardRefRenderFunction<
 	const absoluteFrame = useTimelinePosition();
 
 	const frame = useCurrentFrame();
-	const volumePropsFrame = useFrameForVolumeProp();
+	const volumePropsFrame = useFrameForVolumeProp(
+		loopVolumeCurveBehavior ?? 'repeat',
+	);
 	const videoConfig = useUnsafeVideoConfig();
 	const videoRef = useRef<HTMLVideoElement>(null);
 	const sequenceContext = useContext(SequenceContext);
 	const mediaStartsAt = useMediaStartsAt();
 	const environment = getRemotionEnvironment();
+	const logLevel = useLogLevel();
+	const mountTime = useMountTime();
 
 	const {registerRenderAsset, unregisterRenderAsset} =
 		useContext(RenderAssetManager);
@@ -114,6 +123,7 @@ const VideoForRenderingForwardFunction: React.ForwardRefRenderFunction<
 			playbackRate: playbackRate ?? 1,
 			allowAmplificationDuringRender: allowAmplificationDuringRender ?? false,
 			toneFrequency: toneFrequency ?? null,
+			audioStartFrame: Math.max(0, -(sequenceContext?.relativeFrom ?? 0)),
 		});
 
 		return () => unregisterRenderAsset(id);
@@ -129,15 +139,12 @@ const VideoForRenderingForwardFunction: React.ForwardRefRenderFunction<
 		playbackRate,
 		allowAmplificationDuringRender,
 		toneFrequency,
+		sequenceContext?.relativeFrom,
 	]);
 
-	useImperativeHandle(
-		ref,
-		() => {
-			return videoRef.current as HTMLVideoElement;
-		},
-		[],
-	);
+	useImperativeHandle(ref, () => {
+		return videoRef.current as HTMLVideoElement;
+	}, []);
 
 	useEffect(() => {
 		if (!window.remotion_videoEnabled) {
@@ -155,8 +162,14 @@ const VideoForRenderingForwardFunction: React.ForwardRefRenderFunction<
 			startFrom: -mediaStartsAt,
 			fps: videoConfig.fps,
 		});
-		const handle = delayRender(`Rendering <Video /> with src="${props.src}"`);
-		if (process.env.NODE_ENV === 'test') {
+		const handle = delayRender(
+			`Rendering <Video /> with src="${props.src}" at time ${currentTime}`,
+			{
+				retries: delayRenderRetries ?? undefined,
+				timeoutInMilliseconds: delayRenderTimeoutInMilliseconds ?? undefined,
+			},
+		);
+		if (window.process?.env?.NODE_ENV === 'test') {
 			continueRender(handle);
 			return;
 		}
@@ -181,11 +194,13 @@ const VideoForRenderingForwardFunction: React.ForwardRefRenderFunction<
 			continueRender(handle);
 		};
 
-		const seek = seekToTimeMultipleUntilRight(
-			current,
-			currentTime,
-			videoConfig.fps,
-		);
+		const seek = seekToTimeMultipleUntilRight({
+			element: current,
+			desiredTime: currentTime,
+			fps: videoConfig.fps,
+			logLevel,
+			mountTime,
+		});
 
 		seek.prom.then(() => {
 			continueRender(handle);
@@ -228,6 +243,10 @@ const VideoForRenderingForwardFunction: React.ForwardRefRenderFunction<
 		frame,
 		mediaStartsAt,
 		onError,
+		delayRenderRetries,
+		delayRenderTimeoutInMilliseconds,
+		logLevel,
+		mountTime,
 	]);
 
 	const {src} = props;
@@ -236,11 +255,17 @@ const VideoForRenderingForwardFunction: React.ForwardRefRenderFunction<
 	if (environment.isRendering) {
 		// eslint-disable-next-line react-hooks/rules-of-hooks
 		useLayoutEffect(() => {
-			if (process.env.NODE_ENV === 'test') {
+			if (window.process?.env?.NODE_ENV === 'test') {
 				return;
 			}
 
-			const newHandle = delayRender('Loading <Video> duration with src=' + src);
+			const newHandle = delayRender(
+				'Loading <Video> duration with src=' + src,
+				{
+					retries: delayRenderRetries ?? undefined,
+					timeoutInMilliseconds: delayRenderTimeoutInMilliseconds ?? undefined,
+				},
+			);
 			const {current} = videoRef;
 
 			const didLoad = () => {
@@ -263,10 +288,10 @@ const VideoForRenderingForwardFunction: React.ForwardRefRenderFunction<
 				current?.removeEventListener('loadedmetadata', didLoad);
 				continueRender(newHandle);
 			};
-		}, [src, onDuration]);
+		}, [src, onDuration, delayRenderRetries, delayRenderTimeoutInMilliseconds]);
 	}
 
-	return <video ref={videoRef} {...props} onError={onError} />;
+	return <video ref={videoRef} disableRemotePlayback {...props} />;
 };
 
 export const VideoForRendering = forwardRef(

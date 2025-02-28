@@ -12,14 +12,14 @@
  */
 
 import type {HotMiddlewareOptions, ModuleMap} from '@remotion/studio-shared';
-import {notificationCenter} from '../components/Notifications/NotificationCenter';
+import {showNotification} from '../components/Notifications/NotificationCenter';
 import {reloadUrl} from '../helpers/url-state';
 
 if (!__webpack_module__.hot) {
 	throw new Error('[Fast refresh] Hot Module Replacement is disabled.');
 }
 
-const hmrDocsUrl = 'https://webpack.js.org/concepts/hot-module-replacement/'; // eslint-disable-line max-len
+const hmrDocsUrl = 'https://webpack.js.org/concepts/hot-module-replacement/';
 
 let lastHash: string | undefined;
 const failureStatuses = {abort: 1, fail: 1};
@@ -32,6 +32,13 @@ const applyOptions: AcceptOptions = {
 			'Ignored an update to unaccepted module ' +
 				(data.chain ?? []).join(' -> '),
 		);
+
+		// Case:
+		// 1. Import a CSS file with a bad filename in Root.tsx
+		// 2. Fix the import and save it
+		if (!window.remotion_isStudio) {
+			reloadUrl();
+		}
 	},
 	onDeclined(data) {
 		console.warn(
@@ -184,13 +191,10 @@ export const processUpdate = function (
 
 		if (options.warn) console.warn('[Fast refresh] Reloading page');
 		if (window.remotion_unsavedProps) {
-			notificationCenter.current?.addNotification({
-				id: 'random',
-				content:
-					'Fast refresh needs to reload the page, but you have unsaved props. Save then reload the page to apply changes.',
-				created: new Date().getMilliseconds(),
-				duration: 1,
-			});
+			showNotification(
+				'Fast refresh needs to reload the page, but you have unsaved props. Save then reload the page to apply changes.',
+				1000,
+			);
 		} else {
 			reloadUrl();
 		}

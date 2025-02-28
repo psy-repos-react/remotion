@@ -11,7 +11,7 @@ const getFrameFromX = (
 ) => {
 	const pos = clientX;
 	const frame = Math.round(
-		interpolate(pos, [0, width], [0, durationInFrames - 1 ?? 0], {
+		interpolate(pos, [0, width], [0, durationInFrames - 1], {
 			extrapolateLeft: 'clamp',
 			extrapolateRight: 'clamp',
 		}),
@@ -25,6 +25,7 @@ const VERTICAL_PADDING = 4;
 
 const containerStyle: React.CSSProperties = {
 	userSelect: 'none',
+	WebkitUserSelect: 'none',
 	paddingTop: VERTICAL_PADDING,
 	paddingBottom: VERTICAL_PADDING,
 	boxSizing: 'border-box',
@@ -58,7 +59,7 @@ export const PlayerSeekBar: React.FC<{
 	outFrame: number | null;
 }> = ({durationInFrames, onSeekEnd, onSeekStart, inFrame, outFrame}) => {
 	const containerRef = useRef<HTMLDivElement>(null);
-	const barHovered = useHoverState(containerRef);
+	const barHovered = useHoverState(containerRef, false);
 	const size = useElementSize(containerRef, {
 		triggerOnWindowResize: true,
 		shouldApplyCssTransforms: true,
@@ -78,20 +79,22 @@ export const PlayerSeekBar: React.FC<{
 		dragging: false,
 	});
 
-	const left = size ? size.left : null;
 	const width = size?.width ?? 0;
 
 	const onPointerDown = useCallback(
 		(e: React.PointerEvent<HTMLDivElement>) => {
-			if (left === null) {
-				throw new Error('Player has no size');
-			}
-
 			if (e.button !== 0) {
 				return;
 			}
 
-			const _frame = getFrameFromX(e.clientX - left, durationInFrames, width);
+			const posLeft = containerRef.current?.getBoundingClientRect()
+				.left as number;
+
+			const _frame = getFrameFromX(
+				e.clientX - posLeft,
+				durationInFrames,
+				width,
+			);
 			pause();
 			seek(_frame);
 			setDragging({
@@ -100,7 +103,7 @@ export const PlayerSeekBar: React.FC<{
 			});
 			onSeekStart();
 		},
-		[left, durationInFrames, width, pause, seek, playing, onSeekStart],
+		[durationInFrames, width, pause, seek, playing, onSeekStart],
 	);
 
 	const onPointerMove = useCallback(
@@ -113,8 +116,11 @@ export const PlayerSeekBar: React.FC<{
 				return;
 			}
 
+			const posLeft = containerRef.current?.getBoundingClientRect()
+				.left as number;
+
 			const _frame = getFrameFromX(
-				e.clientX - (size?.left ?? 0),
+				e.clientX - posLeft,
 				durationInFrames,
 				size.width,
 			);
@@ -170,19 +176,19 @@ export const PlayerSeekBar: React.FC<{
 				(frame / Math.max(1, durationInFrames - 1)) * width - KNOB_SIZE / 2,
 			),
 			boxShadow: '0 0 2px black',
-			opacity: Number(barHovered),
+			opacity: Number(barHovered || dragging.dragging),
 		};
-	}, [barHovered, durationInFrames, frame, width]);
+	}, [barHovered, dragging.dragging, durationInFrames, frame, width]);
 
 	const fillStyle: React.CSSProperties = useMemo(() => {
 		return {
 			height: BAR_HEIGHT,
 			backgroundColor: 'rgba(255, 255, 255, 1)',
-			width: ((frame - (inFrame ?? 0)) / (durationInFrames - 1)) * 100 + '%',
-			marginLeft: ((inFrame ?? 0) / (durationInFrames - 1)) * 100 + '%',
+			width: ((frame - (inFrame ?? 0)) / (durationInFrames - 1)) * width,
+			marginLeft: ((inFrame ?? 0) / (durationInFrames - 1)) * width,
 			borderRadius: BAR_HEIGHT / 2,
 		};
-	}, [durationInFrames, frame, inFrame]);
+	}, [durationInFrames, frame, inFrame, width]);
 
 	const active: React.CSSProperties = useMemo(() => {
 		return {

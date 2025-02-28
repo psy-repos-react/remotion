@@ -10,6 +10,7 @@
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
+import type {LogLevel} from '@remotion/renderer';
 import {RenderInternals} from '@remotion/renderer';
 import type {ChildProcess} from 'node:child_process';
 import child_process, {exec} from 'node:child_process';
@@ -44,6 +45,7 @@ function isTerminalEditor(editor: Editor) {
 	}
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const editorNames = [
 	'atom',
 	'/Applications/Atom Beta.app/Contents/MacOS/Atom Beta',
@@ -416,7 +418,7 @@ export async function guessEditor(): Promise<ProcessAndCommand[]> {
 
 			return availableEditors;
 		}
-	} catch (error) {
+	} catch {
 		// Ignore...
 	}
 
@@ -450,12 +452,14 @@ export async function launchEditor({
 	fileName,
 	lineNumber,
 	vsCodeNewWindow,
+	logLevel,
 }: {
 	fileName: string;
 	lineNumber: number;
 	colNumber: number;
 	editor: ProcessAndCommand;
 	vsCodeNewWindow: boolean;
+	logLevel: LogLevel;
 }): Promise<boolean> {
 	if (!fs.existsSync(fileName)) {
 		return false;
@@ -500,16 +504,20 @@ export async function launchEditor({
 		process.platform === 'win32' &&
 		!WINDOWS_FILE_NAME_WHITELIST.test(fileName.trim())
 	) {
-		Log.error();
-		Log.error('Could not open ' + path.basename(fileName) + ' in the editor.');
-		Log.error();
+		Log.error({indent: false, logLevel});
 		Log.error(
+			{indent: false, logLevel},
+			'Could not open ' + path.basename(fileName) + ' in the editor.',
+		);
+		Log.error({indent: false, logLevel});
+		Log.error(
+			{indent: false, logLevel},
 			'When running on Windows, file names are checked against a whitelist ' +
 				'to protect against remote code execution attacks. File names may ' +
 				'consist only of alphanumeric characters (all languages), periods, ' +
 				'dashes, slashes, and underscores.',
 		);
-		Log.error();
+		Log.error({indent: false, logLevel});
 		return false;
 	}
 
@@ -571,12 +579,20 @@ export async function launchEditor({
 			_childProcess = null;
 
 			if (errorCode) {
-				Log.error(`Process exited with code ${errorCode}`);
+				Log.error(
+					{indent: false, logLevel},
+					`Process exited with code ${errorCode}`,
+				);
 			}
 		});
 
 		_childProcess.on('error', (error) => {
-			Log.error('Error opening file in editor', fileName, error.message);
+			Log.error(
+				{indent: false, logLevel},
+				'Error opening file in editor',
+				fileName,
+				error.message,
+			);
 			reject(new Error('Error opening file in editor'));
 		});
 		resolve(true);

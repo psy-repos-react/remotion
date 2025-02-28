@@ -7,6 +7,7 @@ export const handleAddRender: ApiHandler<AddRenderRequest, undefined> = ({
 	entryPoint,
 	remotionRoot,
 	logLevel,
+	binariesDirectory,
 	methods: {addJob},
 }): Promise<undefined> => {
 	const id = String(Math.random()).replace('0.', '');
@@ -56,6 +57,13 @@ export const handleAddRender: ApiHandler<AddRenderRequest, undefined> = ({
 				multiProcessOnLinux: input.multiProcessOnLinux,
 				beepOnFinish: input.beepOnFinish,
 				repro: input.repro,
+				binariesDirectory,
+				forSeamlessAacConcatenation: input.forSeamlessAacConcatenation,
+				separateAudioTo: input.separateAudioTo,
+				metadata: input.metadata,
+				hardwareAcceleration: input.hardwareAcceleration,
+				chromeMode: input.chromeMode,
+				offthreadVideoThreads: input.offthreadVideoThreads,
 			},
 			logLevel,
 		});
@@ -91,6 +99,10 @@ export const handleAddRender: ApiHandler<AddRenderRequest, undefined> = ({
 				multiProcessOnLinux: input.multiProcessOnLinux,
 				beepOnFinish: input.beepOnFinish,
 				repro: input.repro,
+				binariesDirectory,
+				metadata: input.metadata,
+				chromeMode: input.chromeMode,
+				offthreadVideoThreads: input.offthreadVideoThreads,
 			},
 			logLevel,
 		});
@@ -122,6 +134,10 @@ export const handleAddRender: ApiHandler<AddRenderRequest, undefined> = ({
 				multiProcessOnLinux: input.multiProcessOnLinux,
 				beepOnFinish: input.beepOnFinish,
 				repro: false,
+				binariesDirectory,
+				metadata: input.metadata,
+				chromeMode: input.chromeMode,
+				offthreadVideoThreads: input.offthreadVideoThreads,
 			},
 			entryPoint,
 			remotionRoot,

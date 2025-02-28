@@ -7,7 +7,7 @@ import {
 	setRenderJobs,
 } from '../helpers/document-title';
 import {useKeybinding} from '../helpers/use-keybinding';
-import {sendErrorNotification} from './Notifications/NotificationCenter';
+import {showNotification} from './Notifications/NotificationCenter';
 import {RenderQueueContext} from './RenderQueue/context';
 
 export const TitleUpdater: React.FC = () => {
@@ -42,7 +42,7 @@ export const TitleUpdater: React.FC = () => {
 };
 
 export const CurrentCompositionKeybindings: React.FC<{
-	readOnlyStudio: boolean;
+	readonly readOnlyStudio: boolean;
 }> = ({readOnlyStudio}) => {
 	const keybindings = useKeybinding();
 	const video = Internals.useVideo();
@@ -54,11 +54,11 @@ export const CurrentCompositionKeybindings: React.FC<{
 		}
 
 		if (readOnlyStudio) {
-			return sendErrorNotification('Studio is read-only');
+			return showNotification('Studio is read-only', 2000);
 		}
 
 		if (type !== 'connected') {
-			sendErrorNotification('Studio server is offline');
+			showNotification('Studio server is offline', 2000);
 			return;
 		}
 

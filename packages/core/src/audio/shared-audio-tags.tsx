@@ -9,6 +9,7 @@ import React, {
 	useRef,
 	useState,
 } from 'react';
+import {useLogLevel, useMountTime} from '../log-level-context.js';
 import {playAndHandleNotAllowedError} from '../play-and-handle-not-allowed-error.js';
 import type {RemotionAudioProps} from './props.js';
 
@@ -27,7 +28,7 @@ import type {RemotionAudioProps} from './props.js';
 type AudioElem = {
 	id: number;
 	props: RemotionAudioProps;
-	el: React.RefObject<HTMLAudioElement>;
+	el: React.RefObject<HTMLAudioElement | null>;
 	audioId: string;
 };
 
@@ -79,8 +80,8 @@ const didPropChange = (key: string, newProp: unknown, prevProp: unknown) => {
 		!(newProp as string).startsWith('data:')
 	) {
 		return (
-			new URL(prevProp as string, window.location.origin).toString() !==
-			new URL(newProp as string, window.location.origin).toString()
+			new URL(prevProp as string, window.origin).toString() !==
+			new URL(newProp as string, window.origin).toString()
 		);
 	}
 
@@ -94,9 +95,11 @@ const didPropChange = (key: string, newProp: unknown, prevProp: unknown) => {
 export const SharedAudioContext = createContext<SharedContext | null>(null);
 
 export const SharedAudioContextProvider: React.FC<{
-	numberOfAudioTags: number;
-	children: React.ReactNode;
-	component: LazyExoticComponent<ComponentType<Record<string, unknown>>> | null;
+	readonly numberOfAudioTags: number;
+	readonly children: React.ReactNode;
+	readonly component: LazyExoticComponent<
+		ComponentType<Record<string, unknown>>
+	> | null;
 }> = ({children, numberOfAudioTags, component}) => {
 	const audios = useRef<AudioElem[]>([]);
 	const [initialNumberOfAudioTags] = useState(numberOfAudioTags);
@@ -158,7 +161,7 @@ export const SharedAudioContextProvider: React.FC<{
 				throw new Error(
 					`Tried to simultaneously mount ${
 						numberOfAudioTags + 1
-					} <Audio /> tags at the same time. With the current settings, the maximum amount of <Audio /> tags is limited to ${numberOfAudioTags} at the same time. Remotion pre-mounts silent audio tags to help avoid browser autoplay restrictions. See https://remotion.dev/docs/player/autoplay#use-the-numberofsharedaudiotags-property for more information on how to increase this limit.`,
+					} <Audio /> tags at the same time. With the current settings, the maximum amount of <Audio /> tags is limited to ${numberOfAudioTags} at the same time. Remotion pre-mounts silent audio tags to help avoid browser autoplay restrictions. See https://remotion.dev/docs/player/autoplay#using-the-numberofsharedaudiotags-prop for more information on how to increase this limit.`,
 				);
 			}
 
@@ -235,11 +238,21 @@ export const SharedAudioContextProvider: React.FC<{
 		[rerenderAudios],
 	);
 
+	const logLevel = useLogLevel();
+	const mountTime = useMountTime();
+
 	const playAllAudios = useCallback(() => {
 		refs.forEach((ref) => {
-			playAndHandleNotAllowedError(ref.ref, 'audio');
+			playAndHandleNotAllowedError({
+				mediaRef: ref.ref,
+				mediaType: 'audio',
+				onAutoPlayError: null,
+				logLevel,
+				mountTime,
+				reason: 'playing all audios',
+			});
 		});
-	}, [refs]);
+	}, [logLevel, mountTime, refs]);
 
 	const value: SharedContext = useMemo(() => {
 		return {

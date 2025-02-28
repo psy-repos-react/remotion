@@ -6,9 +6,12 @@ import React, {
 	useState,
 } from 'react';
 import {CompositionManagerProvider} from './CompositionManager.js';
-import {continueRender, delayRender} from './delay-render.js';
 import {EditorPropsProvider} from './EditorProps.js';
-import {NativeLayersProvider} from './NativeLayers.js';
+import {BufferingProvider} from './buffering.js';
+import {continueRender, delayRender} from './delay-render.js';
+import type {LoggingContextValue} from './log-level-context.js';
+import {LogLevelContext} from './log-level-context.js';
+import type {LogLevel} from './log.js';
 import type {TNonceContext} from './nonce.js';
 import {NonceContext} from './nonce.js';
 import {PrefetchProvider} from './prefetch-state.js';
@@ -19,9 +22,9 @@ import type {
 	TimelineContextValue,
 } from './timeline-position-state.js';
 import {
-	getInitialFrameState,
 	SetTimelineContext,
 	TimelineContext,
+	getInitialFrameState,
 } from './timeline-position-state.js';
 import {DurationsContextProvider} from './video/duration-state.js';
 
@@ -32,9 +35,10 @@ declare const __webpack_module__: {
 };
 
 export const RemotionRoot: React.FC<{
-	children: React.ReactNode;
-	numberOfAudioTags: number;
-}> = ({children, numberOfAudioTags}) => {
+	readonly children: React.ReactNode;
+	readonly numberOfAudioTags: number;
+	readonly logLevel: LogLevel;
+}> = ({children, numberOfAudioTags, logLevel}) => {
 	const [remotionRootId] = useState(() => String(random(null)));
 	const [frame, setFrame] = useState<Record<string, number>>(() =>
 		getInitialFrameState(),
@@ -48,13 +52,32 @@ export const RemotionRoot: React.FC<{
 	if (typeof window !== 'undefined') {
 		// eslint-disable-next-line react-hooks/rules-of-hooks
 		useLayoutEffect(() => {
-			window.remotion_setFrame = (f: number, composition: string) => {
+			window.remotion_setFrame = (f: number, composition: string, attempt) => {
+				window.remotion_attempt = attempt;
 				const id = delayRender(`Setting the current frame to ${f}`);
-				setFrame((s) => ({
-					...s,
-					[composition]: f,
-				}));
-				requestAnimationFrame(() => continueRender(id));
+
+				let asyncUpdate = true;
+
+				setFrame((s) => {
+					const currentFrame = s[composition] ?? window.remotion_initialFrame;
+					// Avoid cloning the object
+					if (currentFrame === f) {
+						asyncUpdate = false;
+						return s;
+					}
+
+					return {
+						...s,
+						[composition]: f,
+					};
+				});
+
+				// After setting the state, need to wait until it is applied in the next cycle
+				if (asyncUpdate) {
+					requestAnimationFrame(() => continueRender(id));
+				} else {
+					continueRender(id);
+				}
 			};
 
 			window.remotion_isPlayer = false;
@@ -100,25 +123,29 @@ export const RemotionRoot: React.FC<{
 		}
 	}, []);
 
+	const logging: LoggingContextValue = useMemo(() => {
+		return {logLevel, mountTime: Date.now()};
+	}, [logLevel]);
+
 	return (
-		<NonceContext.Provider value={nonceContext}>
-			<TimelineContext.Provider value={timelineContextValue}>
-				<SetTimelineContext.Provider value={setTimelineContextValue}>
-					<EditorPropsProvider>
-						<PrefetchProvider>
-							<NativeLayersProvider>
+		<LogLevelContext.Provider value={logging}>
+			<NonceContext.Provider value={nonceContext}>
+				<TimelineContext.Provider value={timelineContextValue}>
+					<SetTimelineContext.Provider value={setTimelineContextValue}>
+						<EditorPropsProvider>
+							<PrefetchProvider>
 								<CompositionManagerProvider
 									numberOfAudioTags={numberOfAudioTags}
 								>
 									<DurationsContextProvider>
-										{children}
+										<BufferingProvider>{children}</BufferingProvider>
 									</DurationsContextProvider>
 								</CompositionManagerProvider>
-							</NativeLayersProvider>
-						</PrefetchProvider>
-					</EditorPropsProvider>
-				</SetTimelineContext.Provider>
-			</TimelineContext.Provider>
-		</NonceContext.Provider>
+							</PrefetchProvider>
+						</EditorPropsProvider>
+					</SetTimelineContext.Provider>
+				</TimelineContext.Provider>
+			</NonceContext.Provider>
+		</LogLevelContext.Provider>
 	);
 };

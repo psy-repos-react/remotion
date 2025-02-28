@@ -1,7 +1,14 @@
+import type {
+	ModifyableCSSProperties,
+	TextTransform,
+} from '../layouts/measure-text';
 import {measureText} from '../layouts/measure-text';
 
 const sampleSize = 100;
-
+/*
+ * @description Calculates the font size needed to fit text into a specified width container.
+ * @see [Documentation](https://remotion.dev/docs/layout-utils/fit-text)
+ */
 export const fitText = ({
 	text,
 	withinWidth,
@@ -9,6 +16,9 @@ export const fitText = ({
 	fontVariantNumeric,
 	fontWeight,
 	letterSpacing,
+	validateFontIsLoaded,
+	additionalStyles,
+	textTransform,
 }: {
 	text: string;
 	withinWidth: number;
@@ -16,6 +26,9 @@ export const fitText = ({
 	fontWeight?: number | string;
 	letterSpacing?: string;
 	fontVariantNumeric?: string;
+	validateFontIsLoaded?: boolean;
+	textTransform?: TextTransform;
+	additionalStyles?: ModifyableCSSProperties;
 }) => {
 	const estimate = measureText({
 		text,
@@ -24,6 +37,10 @@ export const fitText = ({
 		fontWeight,
 		fontVariantNumeric,
 		letterSpacing,
+		validateFontIsLoaded,
+		textTransform,
+		additionalStyles,
 	});
+
 	return {fontSize: (withinWidth / estimate.width) * sampleSize};
 };

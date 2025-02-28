@@ -13,20 +13,24 @@ export const cloudrunCommand = async (
 		});
 		const {CloudrunInternals} = require(path);
 
-		await CloudrunInternals.executeCommand(args, remotionRoot);
+		await CloudrunInternals.executeCommand(args, remotionRoot, logLevel);
 		process.exit(0);
 	} catch (err) {
 		const manager = StudioServerInternals.getPackageManager(
 			remotionRoot,
 			undefined,
+			0,
 		);
 		const installCommand =
 			manager === 'unknown' ? 'npm i' : manager.installCommand;
-		Log.error(err);
-		Log.error('Remotion Cloud Run is not installed.');
-		Log.infoAdvanced({indent: false, logLevel}, '');
-		Log.infoAdvanced({indent: false, logLevel}, 'You can install it using:');
-		Log.infoAdvanced(
+		Log.error({indent: false, logLevel}, err);
+		Log.error(
+			{indent: false, logLevel},
+			'Remotion Cloud Run is not installed.',
+		);
+		Log.info({indent: false, logLevel}, '');
+		Log.info({indent: false, logLevel}, 'You can install it using:');
+		Log.info(
 			{indent: false, logLevel},
 			`${installCommand} @remotion/cloudrun@${StudioServerInternals.getRemotionVersion()}`,
 		);

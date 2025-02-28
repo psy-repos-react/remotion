@@ -10,15 +10,15 @@ import {INPUT_BACKGROUND} from '../../helpers/colors';
 import {useZIndex} from '../../state/z-index';
 import {VERTICAL_SCROLLBAR_CLASSNAME} from '../Menu/is-menu-item';
 import {
-	getInputBorderColor,
 	INPUT_HORIZONTAL_PADDING,
+	getInputBorderColor,
 } from '../NewComposition/RemInput';
 
 type Props = React.DetailedHTMLProps<
 	React.InputHTMLAttributes<HTMLTextAreaElement>,
 	HTMLTextAreaElement
 > & {
-	status: 'error' | 'warning' | 'ok';
+	readonly status: 'error' | 'warning' | 'ok';
 };
 
 const inputBaseStyle: React.CSSProperties = {
@@ -40,13 +40,9 @@ const RemTextareaFRFunction: React.ForwardRefRenderFunction<
 	const inputRef = useRef<HTMLTextAreaElement>(null);
 	const {tabIndex} = useZIndex();
 
-	useImperativeHandle(
-		ref,
-		() => {
-			return inputRef.current as HTMLTextAreaElement;
-		},
-		[],
-	);
+	useImperativeHandle(ref, () => {
+		return inputRef.current as HTMLTextAreaElement;
+	}, []);
 
 	const style = useMemo(() => {
 		return {

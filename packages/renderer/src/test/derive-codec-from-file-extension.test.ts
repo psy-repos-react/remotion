@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test} from 'bun:test';
 import {makeFileExtensionMap} from '../get-extension-from-codec';
 
 test('Derive codec from file extension', () => {
@@ -18,5 +18,6 @@ test('Derive codec from file extension', () => {
 		mxf: ['prores'],
 		webm: ['vp8', 'vp9'],
 		wav: ['aac', 'mp3', 'wav'],
+		ts: ['h264-ts'],
 	});
 });

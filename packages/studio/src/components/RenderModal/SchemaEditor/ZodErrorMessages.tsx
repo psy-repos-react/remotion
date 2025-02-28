@@ -1,8 +1,8 @@
 import React, {useMemo} from 'react';
 import type {z} from 'zod';
 import {FAIL_COLOR, LIGHT_TEXT} from '../../../helpers/colors';
-import {Spacing} from '../../layout';
 import {WarningTriangle} from '../../NewComposition/ValidationMessage';
+import {Spacing} from '../../layout';
 
 const schemaLabel: React.CSSProperties = {
 	fontSize: 14,
@@ -25,8 +25,8 @@ const triangleStyle: React.CSSProperties = {
 };
 
 export const ZodErrorMessages: React.FC<{
-	zodValidationResult: z.SafeParseReturnType<unknown, unknown>;
-	viewTab: 'schema' | 'json';
+	readonly zodValidationResult: z.SafeParseReturnType<unknown, unknown>;
+	readonly viewTab: 'schema' | 'json';
 }> = ({zodValidationResult, viewTab}) => {
 	if (zodValidationResult.success) {
 		throw new Error('Expected error');

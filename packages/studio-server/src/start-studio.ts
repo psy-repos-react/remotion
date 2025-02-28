@@ -12,6 +12,7 @@ import path from 'node:path';
 import {openBrowser} from './better-opn';
 import {getNetworkAddress} from './get-network-address';
 import type {QueueMethods} from './preview-server/api-types';
+import {noOpUntilRestart} from './preview-server/close-and-restart';
 import {getAbsolutePublicDir} from './preview-server/get-absolute-public-dir';
 import {
 	setLiveEventsListener,
@@ -21,8 +22,6 @@ import {getFiles, initPublicFolderWatch} from './preview-server/public-folder';
 import {startServer} from './preview-server/start-server';
 import {printServerReadyComment, setServerReadyComment} from './server-ready';
 import {watchRootFile} from './watch-root-file';
-
-const noop = () => undefined;
 
 const getShouldOpenBrowser = ({
 	configValueShouldOpenBrowser,
@@ -67,7 +66,7 @@ export const startStudio = async ({
 	maxTimelineTracks,
 	remotionRoot,
 	keyboardShortcutsEnabled,
-	userPassedPublicDir,
+	relativePublicDir,
 	webpackOverride,
 	poll,
 	getRenderDefaults,
@@ -77,6 +76,9 @@ export const startStudio = async ({
 	parsedCliOpen,
 	previewEntry,
 	gitSource,
+	bufferStateDelayInMilliseconds,
+	binariesDirectory,
+	forceIPv4,
 }: {
 	browserArgs: string;
 	browserFlag: string;
@@ -86,10 +88,11 @@ export const startStudio = async ({
 	getCurrentInputProps: () => object;
 	getEnvVariables: () => Record<string, string>;
 	desiredPort: number | null;
-	maxTimelineTracks: number;
+	maxTimelineTracks: number | null;
+	bufferStateDelayInMilliseconds: number | null;
 	remotionRoot: string;
 	keyboardShortcutsEnabled: boolean;
-	userPassedPublicDir: string | null;
+	relativePublicDir: string | null;
 	webpackOverride: WebpackOverrideFn;
 	poll: number | null;
 	getRenderDefaults: () => RenderDefaults;
@@ -99,10 +102,22 @@ export const startStudio = async ({
 	parsedCliOpen: boolean;
 	previewEntry: string;
 	gitSource: GitSource | null;
+	binariesDirectory: string | null;
+	forceIPv4: boolean;
 }) => {
+	try {
+		if (typeof Bun === 'undefined') {
+			process.title = 'node (npx remotion studio)';
+		} else if (typeof Deno === 'undefined') {
+			process.title = 'deno (npx remotiond studio)';
+		} else {
+			process.title = `bun (bunx remotionb studio)`;
+		}
+	} catch {}
+
 	watchRootFile(remotionRoot);
 	const publicDir = getAbsolutePublicDir({
-		userPassedPublicDir,
+		relativePublicDir,
 		remotionRoot,
 	});
 	const hash = crypto.randomBytes(6).toString('hex');
@@ -134,7 +149,7 @@ export const startStudio = async ({
 		staticHash,
 	});
 
-	const {port, liveEventsServer} = await startServer({
+	const {port, liveEventsServer, close} = await startServer({
 		entry: path.resolve(previewEntry),
 		userDefinedComponent: fullEntryPath,
 		getCurrentInputProps,
@@ -146,7 +161,6 @@ export const startStudio = async ({
 		publicDir,
 		webpackOverride,
 		poll,
-		userPassedPublicDir,
 		staticHash,
 		staticHashPrefix,
 		outputHash,
@@ -157,9 +171,12 @@ export const startStudio = async ({
 		numberOfAudioTags,
 		queueMethods,
 		gitSource,
+		bufferStateDelayInMilliseconds,
+		binariesDirectory,
+		forceIPv4,
 	});
 
-	setLiveEventsListener(liveEventsServer);
+	const cleanupLiveEventsListener = setLiveEventsListener(liveEventsServer);
 	const networkAddress = getNetworkAddress();
 	if (networkAddress) {
 		setServerReadyComment(
@@ -173,7 +190,7 @@ export const startStudio = async ({
 		setServerReadyComment(`http://localhost:${port}`);
 	}
 
-	printServerReadyComment('Server ready');
+	printServerReadyComment('Server ready', logLevel);
 
 	const {reasonForBrowserDecision, shouldOpenBrowser} = getShouldOpenBrowser({
 		configValueShouldOpenBrowser,
@@ -193,5 +210,17 @@ export const startStudio = async ({
 		);
 	}
 
-	await new Promise(noop);
+	await noOpUntilRestart();
+	RenderInternals.Log.info(
+		{indent: false, logLevel},
+		'Closing server to restart...',
+	);
+
+	await liveEventsServer.closeConnections();
+	cleanupLiveEventsListener();
+	await close();
+	RenderInternals.Log.info(
+		{indent: false, logLevel},
+		RenderInternals.chalk.blue('Restarting server...'),
+	);
 };

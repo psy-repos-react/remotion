@@ -2,20 +2,20 @@ import {useThree} from '@react-three/fiber';
 import React, {useEffect, useMemo} from 'react';
 import {interpolate, spring, useCurrentFrame, useVideoConfig} from 'remotion';
 import {Texture} from 'three';
+import {RoundedBox} from './RoundedBox';
 import {
 	CAMERA_DISTANCE,
-	getPhoneLayout,
 	PHONE_CURVE_SEGMENTS,
 	PHONE_SHININESS,
+	getPhoneLayout,
 } from './helpers/layout';
 import {roundedRect} from './helpers/rounded-rectangle';
-import {RoundedBox} from './RoundedBox';
 
 export const Phone: React.FC<{
-	videoTexture: Texture | null;
-	aspectRatio: number;
-	baseScale: number;
-	phoneColor: string;
+	readonly videoTexture: Texture | null;
+	readonly aspectRatio: number;
+	readonly baseScale: number;
+	readonly phoneColor: string;
 }> = ({aspectRatio, videoTexture, baseScale, phoneColor}) => {
 	const frame = useCurrentFrame();
 	const {fps, durationInFrames} = useVideoConfig();

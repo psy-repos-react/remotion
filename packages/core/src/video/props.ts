@@ -1,4 +1,5 @@
 import type React from 'react';
+import type {LoopVolumeCurveBehavior} from '../audio/use-audio-frame.js';
 import type {VolumeProp} from '../volume-prop.js';
 
 export type RemotionMainVideoProps = {
@@ -15,7 +16,12 @@ export type RemotionVideoProps = Omit<
 		React.VideoHTMLAttributes<HTMLVideoElement>,
 		HTMLVideoElement
 	>,
-	'autoPlay' | 'controls' | 'onEnded' | 'nonce'
+	| 'autoPlay'
+	| 'controls'
+	| 'onEnded'
+	| 'nonce'
+	| 'onError'
+	| 'disableRemotePlayback'
 > & {
 	name?: string;
 	volume?: VolumeProp;
@@ -23,6 +29,13 @@ export type RemotionVideoProps = Omit<
 	acceptableTimeShiftInSeconds?: number;
 	allowAmplificationDuringRender?: boolean;
 	toneFrequency?: number;
+	pauseWhenBuffering?: boolean;
+	showInTimeline?: boolean;
+	delayRenderTimeoutInMilliseconds?: number;
+	loopVolumeCurveBehavior?: LoopVolumeCurveBehavior;
+	delayRenderRetries?: number;
+	onError?: (err: Error) => void;
+	onAutoPlayError?: null | (() => void);
 };
 
 type DeprecatedOffthreadVideoProps = {
@@ -41,14 +54,25 @@ export type OffthreadVideoProps = {
 	volume?: VolumeProp;
 	playbackRate?: number;
 	muted?: boolean;
-	onError?: React.ReactEventHandler<HTMLVideoElement | HTMLImageElement>;
+	onError?: (err: Error) => void;
 	acceptableTimeShiftInSeconds?: number;
 	allowAmplificationDuringRender?: boolean;
 	toneFrequency?: number;
 	transparent?: boolean;
+	toneMapped?: boolean;
+	pauseWhenBuffering?: boolean;
+	loopVolumeCurveBehavior?: LoopVolumeCurveBehavior;
+	delayRenderTimeoutInMilliseconds?: number;
+	delayRenderRetries?: number;
 	/**
 	 * @deprecated For internal use only
 	 */
 	stack?: string;
+	showInTimeline?: boolean;
+	onAutoPlayError?: null | (() => void);
+	onVideoFrame?: OnVideoFrame;
+	crossOrigin?: '' | 'anonymous' | 'use-credentials';
 } & RemotionMainVideoProps &
 	DeprecatedOffthreadVideoProps;
+
+export type OnVideoFrame = (frame: CanvasImageSource) => void;

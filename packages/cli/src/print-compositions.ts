@@ -1,15 +1,16 @@
+import type {LogLevel} from '@remotion/renderer';
 import type {VideoConfig} from 'remotion';
 import {Log} from './log';
-import {quietFlagProvided} from './parse-command-line';
+import {quietFlagProvided} from './parsed-cli';
 
 const max = (arr: number[]) => {
 	if (arr.length === 0) {
 		throw new Error('Array of 0 length');
 	}
 
-	let biggest = arr[0];
+	let biggest = arr[0] as number;
 	for (let i = 0; i < arr.length; i++) {
-		const elem = arr[i];
+		const elem = arr[i] as number;
 		if (elem > biggest) {
 			biggest = elem;
 		}
@@ -18,23 +19,34 @@ const max = (arr: number[]) => {
 	return biggest;
 };
 
-export const printCompositions = (compositions: VideoConfig[]) => {
+export const printCompositions = (
+	compositions: VideoConfig[],
+	logLevel: LogLevel,
+) => {
 	if (!quietFlagProvided()) {
-		Log.info();
-		Log.info('The following compositions are available:');
-		Log.info();
+		Log.info({indent: false, logLevel});
+		Log.info(
+			{indent: false, logLevel},
+			'The following compositions are available:',
+		);
+		Log.info({indent: false, logLevel});
 	}
 
 	if (quietFlagProvided()) {
-		Log.info(compositions.map((c) => c.id).join(' '));
+		Log.info(
+			{indent: false, logLevel},
+			compositions.map((c) => c.id).join(' '),
+		);
 		return;
 	}
 
-	const firstColumnLength = max(compositions.map(({id}) => id.length)) + 4;
+	const firstColumnLength =
+		(max(compositions.map(({id}) => id.length)) as number) + 4;
 	const secondColumnLength = 8;
 	const thirdColumnLength = 15;
 
 	Log.info(
+		{indent: false, logLevel},
 		compositions
 			.map((comp) => {
 				const isStill = comp.durationInFrames === 1;

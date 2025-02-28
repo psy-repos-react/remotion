@@ -1,8 +1,8 @@
 import type {SymbolicatedStackFrame} from '@remotion/studio-shared';
 import React, {useCallback, useState} from 'react';
 import {Button} from '../../components/Button';
-import {CaretDown, CaretRight} from './carets';
 import {CodeFrame} from './CodeFrame';
+import {CaretDown, CaretRight} from './carets';
 import {formatLocation} from './format-location';
 
 const location: React.CSSProperties = {
@@ -35,10 +35,10 @@ const fnName: React.CSSProperties = {
 };
 
 export const StackElement: React.FC<{
-	s: SymbolicatedStackFrame;
-	lineNumberWidth: number;
-	isFirst: boolean;
-	defaultFunctionName: string;
+	readonly s: SymbolicatedStackFrame;
+	readonly lineNumberWidth: number;
+	readonly isFirst: boolean;
+	readonly defaultFunctionName: string;
 }> = ({s, lineNumberWidth, isFirst, defaultFunctionName}) => {
 	const [showCodeFrame, setShowCodeFrame] = useState(
 		() =>

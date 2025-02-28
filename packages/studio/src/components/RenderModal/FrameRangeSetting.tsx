@@ -1,6 +1,6 @@
 import React, {useCallback} from 'react';
-import {label, optionRow, rightRow} from './layout';
 import {MultiRangeSlider} from './MultiRangeSlider';
+import {label, optionRow, rightRow} from './layout';
 
 const numberWrapper: React.CSSProperties = {
 	minWidth: '39px',
@@ -11,11 +11,11 @@ const numberWrapper: React.CSSProperties = {
 };
 
 export const FrameRangeSetting: React.FC<{
-	startFrame: number;
-	endFrame: number;
-	setEndFrame: React.Dispatch<React.SetStateAction<number | null>>;
-	setStartFrame: React.Dispatch<React.SetStateAction<number | null>>;
-	durationInFrames: number;
+	readonly startFrame: number;
+	readonly endFrame: number;
+	readonly setEndFrame: React.Dispatch<React.SetStateAction<number | null>>;
+	readonly setStartFrame: React.Dispatch<React.SetStateAction<number | null>>;
+	readonly durationInFrames: number;
 }> = ({startFrame, endFrame, setEndFrame, durationInFrames, setStartFrame}) => {
 	const minStartFrame = 0;
 

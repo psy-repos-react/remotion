@@ -5,6 +5,7 @@
  */
 
 import type {webpack} from '@remotion/bundler';
+import type {LogLevel} from '@remotion/renderer';
 import {RenderInternals} from '@remotion/renderer';
 import type {HotMiddlewareMessage, ModuleMap} from '@remotion/studio-shared';
 import {hotMiddlewareOptions} from '@remotion/studio-shared';
@@ -122,12 +123,15 @@ declare global {
 const pathMatch = function (url: string, path: string) {
 	try {
 		return parse(url).pathname === path;
-	} catch (e) {
+	} catch {
 		return false;
 	}
 };
 
-export const webpackHotMiddleware = (compiler: webpack.Compiler) => {
+export const webpackHotMiddleware = (
+	compiler: webpack.Compiler,
+	logLevel: LogLevel,
+) => {
 	const eventStream: EventStream | null = createEventStream(
 		hotMiddlewareOptions.heartbeat,
 	);
@@ -138,7 +142,7 @@ export const webpackHotMiddleware = (compiler: webpack.Compiler) => {
 
 	function onInvalid() {
 		latestStats = null;
-		RenderInternals.Log.info('Building...');
+		RenderInternals.Log.info({indent: false, logLevel}, 'Building...');
 		eventStream?.publish({
 			action: 'building',
 		});

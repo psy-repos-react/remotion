@@ -14,10 +14,12 @@ export const serveStatic = async (
 		port: number | null;
 		downloadMap: DownloadMap;
 		remotionRoot: string;
-		concurrency: number;
+		offthreadVideoThreads: number;
 		logLevel: LogLevel;
 		indent: boolean;
 		offthreadVideoCacheSizeInBytes: number | null;
+		binariesDirectory: string | null;
+		forceIPv4: boolean;
 	},
 ): Promise<{
 	port: number;
@@ -30,10 +32,11 @@ export const serveStatic = async (
 		compositor,
 	} = startOffthreadVideoServer({
 		downloadMap: options.downloadMap,
-		concurrency: options.concurrency,
+		offthreadVideoThreads: options.offthreadVideoThreads,
 		logLevel: options.logLevel,
 		indent: options.indent,
 		offthreadVideoCacheSizeInBytes: options.offthreadVideoCacheSizeInBytes,
+		binariesDirectory: options.binariesDirectory,
 	});
 
 	const connections: Record<string, Socket> = {};
@@ -61,7 +64,14 @@ export const serveStatic = async (
 	});
 
 	server.on('connection', (conn) => {
-		const key = conn.remoteAddress + ':' + conn.remotePort;
+		let key;
+		// Bun 1.0.43 fails on this
+		try {
+			key = conn.remoteAddress + ':' + conn.remotePort;
+		} catch {
+			key = ':';
+		}
+
 		connections[key] = conn;
 		conn.on('close', () => {
 			delete connections[key];
@@ -70,9 +80,9 @@ export const serveStatic = async (
 
 	let selectedPort: number | null = null;
 
-	const maxTries = 5;
+	const maxTries = 10;
 
-	const portConfig = getPortConfig();
+	const portConfig = getPortConfig(options.forceIPv4);
 
 	for (let i = 0; i < maxTries; i++) {
 		let unlock = () => {};
@@ -112,6 +122,11 @@ export const serveStatic = async (
 						// this is okay as we are in cleanup phase
 						closeCompositor()
 							.catch((err) => {
+								if ((err as Error).message.includes('Compositor quit')) {
+									resolve();
+									return;
+								}
+
 								reject(err);
 							})
 							.finally(() => {

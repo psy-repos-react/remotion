@@ -2,17 +2,17 @@ import type {RenderJob} from '@remotion/studio-shared';
 import React, {useCallback, useMemo} from 'react';
 import type {RenderInlineAction} from '../InlineAction';
 import {InlineAction} from '../InlineAction';
-import {sendErrorNotification} from '../Notifications/NotificationCenter';
+import {showNotification} from '../Notifications/NotificationCenter';
 import {cancelRenderJob} from './actions';
 
 export const RenderQueueCancelButton: React.FC<{
-	job: RenderJob;
+	readonly job: RenderJob;
 }> = ({job}) => {
 	const onClick: React.MouseEventHandler = useCallback(
 		(e) => {
 			e.stopPropagation();
 			cancelRenderJob(job).catch((err) => {
-				sendErrorNotification(`Could not cancel job: ${err.message}`);
+				showNotification(`Could not cancel job: ${err.message}`, 2000);
 			});
 		},
 		[job],

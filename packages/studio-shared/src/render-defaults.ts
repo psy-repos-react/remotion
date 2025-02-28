@@ -1,5 +1,6 @@
 import type {
 	AudioCodec,
+	ChromeMode,
 	Codec,
 	ColorSpace,
 	LogLevel,
@@ -10,7 +11,9 @@ import type {
 	VideoImageFormat,
 	X264Preset,
 } from '@remotion/renderer';
+import type {HardwareAccelerationOption} from '@remotion/renderer/client';
 import type {GitSource} from './git-source';
+import type {PackageManager} from './package-manager';
 
 export type RenderDefaults = {
 	jpegQuality: number;
@@ -40,16 +43,23 @@ export type RenderDefaults = {
 	openGlRenderer: OpenGlRenderer | null;
 	ignoreCertificateErrors: boolean;
 	offthreadVideoCacheSizeInBytes: number | null;
+	offthreadVideoThreads: number | null;
 	headless: boolean;
 	colorSpace: ColorSpace;
 	multiProcessOnLinux: boolean;
 	beepOnFinish: boolean;
 	repro: boolean;
+	forSeamlessAacConcatenation: boolean;
+	metadata: Record<string, string> | null;
+	hardwareAcceleration: HardwareAccelerationOption;
+	chromeMode: ChromeMode;
 };
 
 declare global {
 	interface Window {
 		remotion_renderDefaults: RenderDefaults | undefined;
 		remotion_gitSource: GitSource | null;
+		remotion_installedPackages: string[] | null;
+		remotion_packageManager: PackageManager | 'unknown';
 	}
 }

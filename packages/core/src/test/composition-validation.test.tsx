@@ -1,12 +1,13 @@
-/**
- * @vitest-environment jsdom
- */
-import {render} from '@testing-library/react';
+import {cleanup, render} from '@testing-library/react';
+import {afterEach, describe, expect, test} from 'bun:test';
 import React from 'react';
-import {describe, expect, test} from 'vitest';
 import {Composition} from '../Composition.js';
 import {resolveVideoConfig} from '../resolve-video-config.js';
 import {expectToThrow} from './expect-to-throw.js';
+
+afterEach(() => {
+	cleanup();
+});
 
 const AnyComp: React.FC = () => null;
 
@@ -15,18 +16,15 @@ describe('Composition-validation render should throw with invalid props', () => 
 		expectToThrow(
 			() =>
 				resolveVideoConfig({
-					composition: {
-						durationInFrames: 100,
-						calculateMetadata: null,
-						fps: 30,
-						height: 100,
-						id: 'id',
-						width: undefined,
-						defaultProps: {},
-					},
-					editorProps: {},
+					compositionDurationInFrames: 100,
+					calculateMetadata: null,
+					compositionFps: 30,
+					compositionHeight: 100,
+					compositionId: 'id',
+					compositionWidth: null,
+					originalProps: {},
+					defaultProps: {},
 					signal: new AbortController().signal,
-					inputProps: {},
 				}),
 
 			/The "width" prop of the "<Composition \/>" component with the id "id" must be a number, but you passed a value of type undefined/,
@@ -37,17 +35,14 @@ describe('Composition-validation render should throw with invalid props', () => 
 			expectToThrow(
 				() =>
 					resolveVideoConfig({
-						composition: {
-							durationInFrames: 100,
-							calculateMetadata: null,
-							fps: 30,
-							height: -100,
-							id: 'id',
-							width: 100,
-							defaultProps: {},
-						},
-						inputProps: {},
-						editorProps: {},
+						compositionDurationInFrames: 100,
+						calculateMetadata: null,
+						compositionFps: 30,
+						compositionHeight: -100,
+						compositionId: 'id',
+						compositionWidth: 100,
+						defaultProps: {},
+						originalProps: {},
 						signal: new AbortController().signal,
 					}),
 
@@ -58,16 +53,14 @@ describe('Composition-validation render should throw with invalid props', () => 
 			expectToThrow(
 				() =>
 					resolveVideoConfig({
-						composition: {
-							durationInFrames: 100,
-							calculateMetadata: null,
-							fps: 30,
-							height: 0,
-							id: 'id',
-							width: 100,
-						},
-						inputProps: {},
-						editorProps: {},
+						compositionDurationInFrames: 100,
+						calculateMetadata: null,
+						compositionFps: 30,
+						compositionHeight: 0,
+						compositionId: 'id',
+						compositionWidth: 100,
+						defaultProps: {},
+						originalProps: {},
 						signal: new AbortController().signal,
 					}),
 				/The "height" prop of the "<Composition \/>" component with the id "id" must be positive, but got 0./,
@@ -77,16 +70,14 @@ describe('Composition-validation render should throw with invalid props', () => 
 			expectToThrow(
 				() =>
 					resolveVideoConfig({
-						composition: {
-							durationInFrames: 100,
-							calculateMetadata: null,
-							fps: 30,
-							// @ts-expect-error
-							height: '100',
-							id: 'id',
-							width: 100,
-							defaultProps: {},
-						},
+						compositionDurationInFrames: 100,
+						calculateMetadata: null,
+						compositionFps: 30,
+						// @ts-expect-error
+						compositionHeight: '100',
+						compositionId: 'id',
+						compositionWidth: 100,
+						defaultProps: {},
 						editorProps: {},
 						signal: new AbortController().signal,
 					}),
@@ -97,17 +88,14 @@ describe('Composition-validation render should throw with invalid props', () => 
 			expectToThrow(
 				() =>
 					resolveVideoConfig({
-						composition: {
-							durationInFrames: 100,
-							calculateMetadata: null,
-							fps: 30,
-							height: 100.01,
-							id: 'id',
-							width: 100,
-							defaultProps: {},
-						},
-						inputProps: {},
-						editorProps: {},
+						compositionDurationInFrames: 100,
+						calculateMetadata: null,
+						compositionFps: 30,
+						compositionHeight: 100.01,
+						compositionId: 'id',
+						compositionWidth: 100,
+						defaultProps: {},
+						originalProps: {},
 						signal: new AbortController().signal,
 					}),
 				/The "height" prop of the "<Composition \/>" component with the id "id" must be an integer, but is 100.01./,
@@ -119,17 +107,14 @@ describe('Composition-validation render should throw with invalid props', () => 
 			expectToThrow(
 				() =>
 					resolveVideoConfig({
-						composition: {
-							durationInFrames: 100,
-							calculateMetadata: null,
-							fps: 30,
-							height: 100,
-							id: 'id',
-							width: -100,
-							defaultProps: {},
-						},
-						inputProps: {},
-						editorProps: {},
+						compositionDurationInFrames: 100,
+						calculateMetadata: null,
+						compositionFps: 30,
+						compositionHeight: 100,
+						compositionId: 'id',
+						compositionWidth: -100,
+						defaultProps: {},
+						originalProps: {},
 						signal: new AbortController().signal,
 					}),
 				/The "width" prop of the "<Composition \/>" component with the id "id" must be positive, but got -100./,
@@ -139,17 +124,14 @@ describe('Composition-validation render should throw with invalid props', () => 
 			expectToThrow(
 				() =>
 					resolveVideoConfig({
-						composition: {
-							durationInFrames: 100,
-							calculateMetadata: null,
-							fps: 30,
-							height: 100,
-							id: 'id',
-							width: 0,
-							defaultProps: {},
-						},
-						inputProps: {},
-						editorProps: {},
+						compositionDurationInFrames: 100,
+						calculateMetadata: null,
+						compositionFps: 30,
+						compositionHeight: 100,
+						compositionId: 'id',
+						compositionWidth: 0,
+						defaultProps: {},
+						originalProps: {},
 						signal: new AbortController().signal,
 					}),
 				/The "width" prop of the "<Composition \/>" component with the id "id" must be positive, but got 0./,
@@ -159,16 +141,14 @@ describe('Composition-validation render should throw with invalid props', () => 
 			expectToThrow(
 				() =>
 					resolveVideoConfig({
-						composition: {
-							durationInFrames: 100,
-							calculateMetadata: null,
-							fps: 30,
-							height: 100,
-							id: 'id',
-							// @ts-expect-error
-							width: '100',
-							defaultProps: {},
-						},
+						compositionDurationInFrames: 100,
+						calculateMetadata: null,
+						compositionFps: 30,
+						compositionHeight: 100,
+						compositionId: 'id',
+						// @ts-expect-error
+						compositionWidth: '100',
+						defaultProps: {},
 						editorProps: {},
 						signal: new AbortController().signal,
 					}),
@@ -181,17 +161,14 @@ describe('Composition-validation render should throw with invalid props', () => 
 			expectToThrow(
 				() =>
 					resolveVideoConfig({
-						composition: {
-							durationInFrames: -100,
-							calculateMetadata: null,
-							fps: 30,
-							height: 100,
-							id: 'id',
-							width: 100,
-							defaultProps: {},
-						},
-						inputProps: {},
-						editorProps: {},
+						compositionDurationInFrames: -100,
+						calculateMetadata: null,
+						compositionFps: 30,
+						compositionHeight: 100,
+						compositionId: 'id',
+						compositionWidth: 100,
+						defaultProps: {},
+						originalProps: {},
 						signal: new AbortController().signal,
 					}),
 				/The "durationInFrames" prop of the "<Composition \/>" component with the id "id" must be positive, but got -100./,
@@ -201,17 +178,14 @@ describe('Composition-validation render should throw with invalid props', () => 
 			expectToThrow(
 				() =>
 					resolveVideoConfig({
-						composition: {
-							durationInFrames: 0,
-							calculateMetadata: null,
-							fps: 30,
-							height: 100,
-							id: 'id',
-							width: 100,
-							defaultProps: {},
-						},
-						inputProps: {},
-						editorProps: {},
+						compositionDurationInFrames: 0,
+						calculateMetadata: null,
+						compositionFps: 30,
+						compositionHeight: 100,
+						compositionId: 'id',
+						compositionWidth: 100,
+						defaultProps: {},
+						originalProps: {},
 						signal: new AbortController().signal,
 					}),
 				/The "durationInFrames" prop of the "<Composition \/>" component with the id "id" must be positive, but got 0./,
@@ -221,17 +195,14 @@ describe('Composition-validation render should throw with invalid props', () => 
 			expectToThrow(
 				() =>
 					resolveVideoConfig({
-						composition: {
-							durationInFrames: 0.11,
-							calculateMetadata: null,
-							fps: 30,
-							height: 100,
-							id: 'id',
-							width: 100,
-							defaultProps: {},
-						},
-						inputProps: {},
-						editorProps: {},
+						compositionDurationInFrames: 0.11,
+						calculateMetadata: null,
+						compositionFps: 30,
+						compositionHeight: 100,
+						compositionId: 'id',
+						compositionWidth: 100,
+						defaultProps: {},
+						originalProps: {},
 						signal: new AbortController().signal,
 					}),
 				/The "durationInFrames" prop of the "<Composition \/>" component with the id "id" must be an integer, but got 0.11./,
@@ -241,16 +212,14 @@ describe('Composition-validation render should throw with invalid props', () => 
 			expectToThrow(
 				() =>
 					resolveVideoConfig({
-						composition: {
-							// @ts-expect-error
-							durationInFrames: '100',
-							calculateMetadata: null,
-							fps: 30,
-							height: 100,
-							id: 'id',
-							width: 100,
-							defaultProps: {},
-						},
+						// @ts-expect-error
+						compositionDurationInFrames: '100',
+						calculateMetadata: null,
+						compositionFps: 30,
+						compositionHeight: 100,
+						compositionId: 'id',
+						compositionWidth: 100,
+						defaultProps: {},
 						editorProps: {},
 						signal: new AbortController().signal,
 					}),
@@ -263,17 +232,14 @@ describe('Composition-validation render should throw with invalid props', () => 
 			expectToThrow(
 				() =>
 					resolveVideoConfig({
-						composition: {
-							durationInFrames: 100,
-							calculateMetadata: null,
-							fps: -30,
-							height: 100,
-							id: 'id',
-							width: 100,
-							defaultProps: {},
-						},
-						inputProps: {},
-						editorProps: {},
+						compositionDurationInFrames: 100,
+						calculateMetadata: null,
+						compositionFps: -30,
+						compositionHeight: 100,
+						compositionId: 'id',
+						compositionWidth: 100,
+						defaultProps: {},
+						originalProps: {},
 						signal: new AbortController().signal,
 					}),
 				/"fps" must be positive, but got -30./,
@@ -283,17 +249,14 @@ describe('Composition-validation render should throw with invalid props', () => 
 			expectToThrow(
 				() =>
 					resolveVideoConfig({
-						composition: {
-							durationInFrames: 100,
-							calculateMetadata: null,
-							fps: 0,
-							height: 100,
-							id: 'id',
-							width: 100,
-							defaultProps: {},
-						},
-						inputProps: {},
-						editorProps: {},
+						compositionDurationInFrames: 100,
+						calculateMetadata: null,
+						compositionFps: 0,
+						compositionHeight: 100,
+						compositionId: 'id',
+						compositionWidth: 100,
+						defaultProps: {},
+						originalProps: {},
 						signal: new AbortController().signal,
 					}),
 				/"fps" must be positive, but got 0./,
@@ -304,16 +267,14 @@ describe('Composition-validation render should throw with invalid props', () => 
 			expectToThrow(
 				() =>
 					resolveVideoConfig({
-						composition: {
-							durationInFrames: 100,
-							calculateMetadata: null,
-							// @ts-expect-error
-							fps: '30',
-							height: 100,
-							id: 'id',
-							width: 100,
-							defaultProps: {},
-						},
+						compositionDurationInFrames: 100,
+						calculateMetadata: null,
+						// @ts-expect-error
+						compositionFps: '30',
+						compositionHeight: 100,
+						compositionId: 'id',
+						compositionWidth: 100,
+						defaultProps: {},
 						editorProps: {},
 						signal: new AbortController().signal,
 					}),
@@ -434,22 +395,20 @@ describe('Composition-validation render should NOT throw with valid props', () =
 
 test('should resolve props correctly with no calculateMetadata()', async () => {
 	const resolved = await resolveVideoConfig({
-		composition: {
-			calculateMetadata: null,
-			durationInFrames: 100,
-			fps: 30,
-			height: 1080,
-			id: 'test',
-			width: 1920,
-			defaultProps: {
-				a: 'b',
-			},
-		},
-		editorProps: {},
-		inputProps: {
+		calculateMetadata: null,
+		compositionDurationInFrames: 100,
+		compositionFps: 30,
+		compositionHeight: 1080,
+		compositionId: 'test',
+		compositionWidth: 1920,
+		originalProps: {
+			a: 'b',
 			c: 'd',
 		},
 		signal: new AbortController().signal,
+		defaultProps: {
+			a: 'b',
+		},
 	});
 	expect(resolved.props).toEqual({
 		a: 'b',

@@ -2,9 +2,10 @@ import React, {useCallback, useMemo, useState} from 'react';
 import {FAIL_COLOR, LIGHT_TEXT} from '../../../helpers/colors';
 import {Flex} from '../../layout';
 import {InlineRemoveButton} from '../InlineRemoveButton';
-import {getSchemaLabel} from './get-schema-label';
 import {SchemaResetButton} from './SchemaResetButton';
 import {SchemaSaveButton} from './SchemaSaveButton';
+import {getSchemaLabel} from './get-schema-label';
+import {DEFAULT_PROPS_PATH_CLASSNAME} from './scroll-to-default-props-path';
 import type {JSONPath} from './zod-types';
 
 const compactStyles: React.CSSProperties = {
@@ -18,17 +19,17 @@ const compactStyles: React.CSSProperties = {
 };
 
 export const SchemaLabel: React.FC<{
-	jsonPath: JSONPath;
-	isDefaultValue: boolean;
-	onReset: () => void;
-	onSave: () => void;
-	onRemove: null | (() => void);
-	showSaveButton: boolean;
-	saving: boolean;
-	valid: boolean;
-	saveDisabledByParent: boolean;
-	suffix: string | null;
-	handleClick: null | (() => void);
+	readonly jsonPath: JSONPath;
+	readonly isDefaultValue: boolean;
+	readonly onReset: () => void;
+	readonly onSave: () => void;
+	readonly onRemove: null | (() => void);
+	readonly showSaveButton: boolean;
+	readonly saving: boolean;
+	readonly valid: boolean;
+	readonly saveDisabledByParent: boolean;
+	readonly suffix: string | null;
+	readonly handleClick: null | (() => void);
 }> = ({
 	jsonPath,
 	isDefaultValue,
@@ -73,7 +74,11 @@ export const SchemaLabel: React.FC<{
 	);
 
 	return (
-		<div style={compactStyles}>
+		<div
+			style={compactStyles}
+			className={DEFAULT_PROPS_PATH_CLASSNAME}
+			data-json-path={jsonPath.join('.')}
+		>
 			{handleClick ? (
 				// Minus the padding that a button has (user agent padding-line-start)
 				<button

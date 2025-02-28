@@ -1,13 +1,15 @@
 import fs from 'node:fs';
 import path, {extname} from 'node:path';
-import type {TRenderAsset} from 'remotion/no-react';
+import type {AudioOrVideoAsset} from 'remotion/no-react';
 import {random} from 'remotion/no-react';
 import {isAssetCompressed} from '../compress-assets';
 import {ensureOutputDirectory} from '../ensure-output-directory';
 import type {LogLevel} from '../log-level';
+import type {CancelSignal} from '../make-cancel-signal';
 import {getExt} from '../mime-types';
 import {downloadFile} from './download-file';
 import type {DownloadMap} from './download-map';
+import {getAudioChannelsAndDuration} from './get-audio-channels';
 import {sanitizeFilePath} from './sanitize-filepath';
 
 export type RenderMediaOnDownload = (
@@ -30,10 +32,6 @@ const waitForAssetToBeDownloaded = ({
 	downloadDir: string;
 	downloadMap: DownloadMap;
 }): Promise<string> => {
-	if (process.env.NODE_ENV === 'test') {
-		console.log('waiting for asset to be downloaded', src);
-	}
-
 	if (downloadMap.hasBeenDownloadedMap[src]?.[downloadDir]) {
 		return Promise.resolve(
 			downloadMap.hasBeenDownloadedMap[src]?.[downloadDir] as string,
@@ -153,11 +151,17 @@ export const downloadAsset = async ({
 	downloadMap,
 	indent,
 	logLevel,
+	shouldAnalyzeAudioImmediately,
+	binariesDirectory,
+	cancelSignalForAudioAnalysis,
 }: {
 	src: string;
 	downloadMap: DownloadMap;
 	indent: boolean;
 	logLevel: LogLevel;
+	shouldAnalyzeAudioImmediately: boolean;
+	binariesDirectory: string | null;
+	cancelSignalForAudioAnalysis: CancelSignal | undefined;
 }): Promise<string> => {
 	if (isAssetCompressed(src)) {
 		return src;
@@ -174,13 +178,11 @@ export const downloadAsset = async ({
 			return claimedDownloadLocation;
 		}
 
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 		downloadMap.hasBeenDownloadedMap[src]![downloadDir] = null;
 		if (!downloadMap.isDownloadingMap[src]) {
 			downloadMap.isDownloadingMap[src] = {};
 		}
 
-		// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 		downloadMap.isDownloadingMap[src]![downloadDir] = false;
 	}
 
@@ -197,10 +199,6 @@ export const downloadAsset = async ({
 			[downloadDir: string]: boolean;
 		}
 	)[downloadDir] = true;
-
-	if (process.env.NODE_ENV === 'test') {
-		console.log('Actually downloading asset', src);
-	}
 
 	downloadMap.emitter.dispatchDownload(src);
 
@@ -257,6 +255,16 @@ export const downloadAsset = async ({
 	});
 
 	notifyAssetIsDownloaded({src, downloadMap, downloadDir, to});
+	if (shouldAnalyzeAudioImmediately) {
+		await getAudioChannelsAndDuration({
+			binariesDirectory,
+			downloadMap,
+			src: to,
+			indent,
+			logLevel,
+			cancelSignal: cancelSignalForAudioAnalysis,
+		});
+	}
 
 	return to;
 };
@@ -341,7 +349,7 @@ export const getSanitizedFilenameForAssetUrl = ({
 		split.length > 1 && split[split.length - 1]
 			? `.${split[split.length - 1]}`
 			: '';
-	const hashedFileName = String(random(`${pathname}${search}`)).replace(
+	const hashedFileName = String(random(`${src}${pathname}${search}`)).replace(
 		'0.',
 		'',
 	);
@@ -357,19 +365,28 @@ export const downloadAndMapAssetsToFileUrl = async ({
 	downloadMap,
 	logLevel,
 	indent,
+	binariesDirectory,
+	cancelSignalForAudioAnalysis,
+	shouldAnalyzeAudioImmediately,
 }: {
-	renderAsset: TRenderAsset;
+	renderAsset: AudioOrVideoAsset;
 	onDownload: RenderMediaOnDownload | null;
 	downloadMap: DownloadMap;
 	logLevel: LogLevel;
 	indent: boolean;
-}): Promise<TRenderAsset> => {
+	shouldAnalyzeAudioImmediately: boolean;
+	binariesDirectory: string | null;
+	cancelSignalForAudioAnalysis: CancelSignal | undefined;
+}): Promise<AudioOrVideoAsset> => {
 	const cleanup = attachDownloadListenerToEmitter(downloadMap, onDownload);
 	const newSrc = await downloadAsset({
 		src: renderAsset.src,
 		downloadMap,
 		indent,
 		logLevel,
+		shouldAnalyzeAudioImmediately,
+		binariesDirectory,
+		cancelSignalForAudioAnalysis,
 	});
 	cleanup();
 
