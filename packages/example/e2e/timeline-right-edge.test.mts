@@ -55,7 +55,7 @@ const Layers = () => <>
 export const E2eTestRoot = () => <Composition id="timeline-edges" component={Layers} durationInFrames={180} fps={30} width={640} height={360} />;
 `,
 		);
-		await page.setViewportSize({width: 1440, height: 1600});
+		await page.setViewportSize({width: 1440, height: 2000});
 		await page.goto(`${STUDIO_URL}/timeline-edges`);
 		for (const [name, radius] of [
 			['Fill available time', '2px'],
@@ -109,6 +109,231 @@ export const E2eTestRoot = () => <Composition id="timeline-edges" component={Lay
 			await expect(layer).toHaveCSS('border-top-left-radius', radius);
 			await expect(layer).toHaveCSS('border-bottom-left-radius', radius);
 		}
+
+		const rightEdgeLayer = page.locator(
+			'[data-timeline-marquee-item][title="Explicit fill cutoff"]',
+		);
+		await expect(rightEdgeLayer).toHaveCSS('opacity', '0.75');
+		const rightEdgeHandle = rightEdgeLayer.locator(
+			'[title="Drag to change duration"]',
+		);
+
+		await rightEdgeHandle.hover();
+		await page.mouse.down();
+		try {
+			await expect(rightEdgeLayer).toHaveCSS('opacity', '0.75');
+		} finally {
+			await page.mouse.up();
+		}
+
+		await expect(rightEdgeLayer).toHaveCSS('opacity', '1');
+
+		const leftEdgeLayer = page.locator(
+			'[data-timeline-marquee-item][title="Solid cutoff"]',
+		);
+		await expect(leftEdgeLayer).toHaveCSS('opacity', '0.75');
+		const leftEdgeHandle = leftEdgeLayer.locator(
+			'[title="Drag to trim start"]',
+		);
+		const leftEdgeHandleBox = await leftEdgeHandle.boundingBox();
+		if (leftEdgeHandleBox === null) {
+			throw new Error('Expected left timeline edge to have a bounding box');
+		}
+
+		await page.mouse.move(
+			leftEdgeHandleBox.x + leftEdgeHandleBox.width - 1,
+			leftEdgeHandleBox.y + leftEdgeHandleBox.height / 2,
+		);
+		await page.mouse.down();
+		try {
+			await expect(leftEdgeLayer).toHaveCSS('opacity', '0.75');
+			await expect(rightEdgeLayer).toHaveCSS('opacity', '1');
+		} finally {
+			await page.mouse.up();
+		}
+
+		await expect(leftEdgeLayer).toHaveCSS('opacity', '1');
+		await expect(rightEdgeLayer).toHaveCSS('opacity', '0.75');
+
+		const dragHandle = async ({
+			handle,
+			deltaX,
+		}: {
+			readonly handle: ReturnType<typeof page.locator>;
+			readonly deltaX: number;
+		}) => {
+			const box = await handle.boundingBox();
+			if (box === null) {
+				throw new Error(
+					'Expected timeline resize handle to have a bounding box',
+				);
+			}
+
+			await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+			await page.mouse.down();
+			try {
+				await page.mouse.move(
+					box.x + box.width / 2 + deltaX,
+					box.y + box.height / 2,
+					{
+						steps: 5,
+					},
+				);
+			} finally {
+				await page.mouse.up();
+			}
+		};
+
+		const getSequenceNumberProp = (
+			source: string,
+			name: string,
+			prop: 'durationInFrames' | 'from',
+		) => {
+			const match = source.match(
+				new RegExp(
+					`<[A-Za-z]+\\b(?=[^>]*name="${name}")(?=[^>]*${prop}=\\{(\\d+)\\})[^>]*>`,
+				),
+			);
+			return match ? Number(match[1]) : null;
+		};
+
+		const rightResizeA = page.locator(
+			'[data-timeline-marquee-item][title="Explicit fill cutoff"]',
+		);
+		const rightResizeB = page.locator(
+			'[data-timeline-marquee-item][title="Duration cutoff"]',
+		);
+		await rightResizeA.scrollIntoViewIfNeeded();
+		await rightResizeA.click();
+		await expect(rightResizeA).toHaveCSS('opacity', '1');
+		await expect(rightResizeB).toHaveCSS('opacity', '0.75');
+		await dragHandle({
+			handle: rightResizeB.locator('[title="Drag to change duration"]'),
+			deltaX: -40,
+		});
+		await expect(rightResizeA).toHaveCSS('opacity', '1');
+		await expect(rightResizeB).toHaveCSS('opacity', '0.75');
+		await expect
+			.poll(() => {
+				const source = fs.readFileSync(rootFile, 'utf-8');
+				return [
+					getSequenceNumberProp(
+						source,
+						'Explicit fill cutoff',
+						'durationInFrames',
+					),
+					getSequenceNumberProp(source, 'Duration cutoff', 'durationInFrames'),
+				];
+			})
+			.toEqual([30, 9]);
+
+		await rightResizeB
+			.locator('[title="Drag to change duration"]')
+			.click({modifiers: ['Meta']});
+		await expect(rightResizeA).toHaveCSS('opacity', '1');
+		await expect(rightResizeB).toHaveCSS('opacity', '1');
+		await dragHandle({
+			handle: rightResizeB.locator('[title="Drag to change duration"]'),
+			deltaX: 40,
+		});
+		await expect
+			.poll(() => {
+				const source = fs.readFileSync(rootFile, 'utf-8');
+				return [
+					getSequenceNumberProp(
+						source,
+						'Explicit fill cutoff',
+						'durationInFrames',
+					),
+					getSequenceNumberProp(source, 'Duration cutoff', 'durationInFrames'),
+				];
+			})
+			.toEqual([36, 15]);
+
+		const leftResizeA = page.locator(
+			'[data-timeline-marquee-item][title="Explicit composition match"]',
+		);
+		const leftResizeB = page.locator(
+			'[data-timeline-marquee-item][title="Fill clipped before own cutoff"]',
+		);
+		await leftResizeA.scrollIntoViewIfNeeded();
+		await leftResizeA.click();
+		await expect(leftResizeA).toHaveCSS('opacity', '1');
+		await expect(leftResizeB).toHaveCSS('opacity', '0.75');
+		await dragHandle({
+			handle: leftResizeB.locator('[title="Drag to trim start"]'),
+			deltaX: 40,
+		});
+		await expect(leftResizeA).toHaveCSS('opacity', '1');
+		await expect(leftResizeB).toHaveCSS('opacity', '0.75');
+		await expect
+			.poll(() => {
+				const source = fs.readFileSync(rootFile, 'utf-8');
+				const fromA = getSequenceNumberProp(
+					source,
+					'Explicit composition match',
+					'from',
+				);
+				const fromB = getSequenceNumberProp(
+					source,
+					'Fill clipped before own cutoff',
+					'from',
+				);
+				return [
+					fromA,
+					fromB,
+					getSequenceNumberProp(
+						source,
+						'Explicit composition match',
+						'durationInFrames',
+					),
+					getSequenceNumberProp(
+						source,
+						'Fill clipped before own cutoff',
+						'durationInFrames',
+					),
+				];
+			})
+			.toEqual([null, 6, 180, 174]);
+
+		await leftResizeB
+			.locator('[title="Drag to trim start"]')
+			.click({modifiers: ['Meta']});
+		await expect(leftResizeA).toHaveCSS('opacity', '1');
+		await expect(leftResizeB).toHaveCSS('opacity', '1');
+		await dragHandle({
+			handle: leftResizeB.locator('[title="Drag to trim start"]'),
+			deltaX: 40,
+		});
+		await expect
+			.poll(() => {
+				const source = fs.readFileSync(rootFile, 'utf-8');
+				const fromA = getSequenceNumberProp(
+					source,
+					'Explicit composition match',
+					'from',
+				);
+				const fromB = getSequenceNumberProp(
+					source,
+					'Fill clipped before own cutoff',
+					'from',
+				);
+				return [
+					fromA,
+					fromB,
+					getSequenceNumberProp(
+						source,
+						'Explicit composition match',
+						'durationInFrames',
+					),
+					getSequenceNumberProp(
+						source,
+						'Fill clipped before own cutoff',
+						'durationInFrames',
+					),
+				];
+			})
+			.toEqual([6, 12, 174, 168]);
 	} finally {
 		await stopStudio();
 	}
