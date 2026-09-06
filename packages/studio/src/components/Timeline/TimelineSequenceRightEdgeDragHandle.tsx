@@ -10,6 +10,7 @@ import React, {
 	useRef,
 	useState,
 } from 'react';
+import {flushSync} from 'react-dom';
 import type {
 	CanUpdateSequencePropStatus,
 	CanUpdateSequencePropStatusKeyframed,
@@ -42,13 +43,43 @@ import {
 } from './save-sequence-prop';
 import {
 	getTimelineSequenceSelectionKey,
+	shouldSelectTimelineRowOnPointerDown,
 	useCurrentTimelineSelectionStateAsRef,
+	type TimelineSelectionInteraction,
 	type TimelineSelection,
 } from './TimelineSelection';
 
 const HANDLE_INSET = 6;
 const HANDLE_OUTSET = 8;
 export const timelineSequenceFromDragSnapThresholdPx = 10;
+
+const getTimelineSequenceEdgeSelectionInteraction = ({
+	button,
+	selected,
+	shiftKey,
+	metaKey,
+	ctrlKey,
+}: {
+	readonly button: number;
+	readonly selected: boolean;
+	readonly shiftKey: boolean;
+	readonly metaKey: boolean;
+	readonly ctrlKey: boolean;
+}): TimelineSelectionInteraction | null => {
+	if (
+		button !== 0 ||
+		!shouldSelectTimelineRowOnPointerDown({
+			selected,
+			shiftKey,
+			metaKey,
+			ctrlKey,
+		})
+	) {
+		return null;
+	}
+
+	return {shiftKey, toggleKey: metaKey || ctrlKey};
+};
 
 const baseStyle: React.CSSProperties = {
 	position: 'absolute',
@@ -1099,7 +1130,16 @@ const TimelineSequenceLeftEdgeDragHandleInner: React.FC<{
 	readonly windowWidth: number;
 	readonly timelineDurationInFrames: number;
 	readonly onDragEnd: (wasDragged: boolean) => void;
-}> = ({nodePathInfo, windowWidth, timelineDurationInFrames, onDragEnd}) => {
+	readonly onSelect: (interaction?: TimelineSelectionInteraction) => void;
+	readonly selected: boolean;
+}> = ({
+	nodePathInfo,
+	windowWidth,
+	timelineDurationInFrames,
+	onDragEnd,
+	onSelect,
+	selected,
+}) => {
 	const {setPropStatuses, setDragOverrides, clearDragOverrides} = useContext(
 		Internals.VisualModeSettersContext,
 	);
@@ -1218,6 +1258,17 @@ const TimelineSequenceLeftEdgeDragHandleInner: React.FC<{
 				return;
 			}
 
+			const selectionInteraction = getTimelineSequenceEdgeSelectionInteraction({
+				button: e.button,
+				selected,
+				shiftKey: e.shiftKey,
+				metaKey: e.metaKey,
+				ctrlKey: e.ctrlKey,
+			});
+			if (selectionInteraction) {
+				flushSync(() => onSelect(selectionInteraction));
+			}
+
 			const pxPerFrame =
 				timelineDurationInFrames > 0
 					? (windowWidth - TIMELINE_PADDING * 2) / timelineDurationInFrames
@@ -1262,7 +1313,9 @@ const TimelineSequenceLeftEdgeDragHandleInner: React.FC<{
 		},
 		[
 			currentSelection,
+			onSelect,
 			propStatusesRef,
+			selected,
 			sequencesRef,
 			timelineDurationInFrames,
 			windowWidth,
@@ -1675,7 +1728,16 @@ const TimelineSequenceRightEdgeDragHandleInner: React.FC<{
 	readonly windowWidth: number;
 	readonly timelineDurationInFrames: number;
 	readonly onDragEnd: (wasDragged: boolean) => void;
-}> = ({nodePathInfo, windowWidth, timelineDurationInFrames, onDragEnd}) => {
+	readonly onSelect: (interaction?: TimelineSelectionInteraction) => void;
+	readonly selected: boolean;
+}> = ({
+	nodePathInfo,
+	windowWidth,
+	timelineDurationInFrames,
+	onDragEnd,
+	onSelect,
+	selected,
+}) => {
 	const {setPropStatuses, setDragOverrides, clearDragOverrides} = useContext(
 		Internals.VisualModeSettersContext,
 	);
@@ -1793,6 +1855,17 @@ const TimelineSequenceRightEdgeDragHandleInner: React.FC<{
 				return;
 			}
 
+			const selectionInteraction = getTimelineSequenceEdgeSelectionInteraction({
+				button: e.button,
+				selected,
+				shiftKey: e.shiftKey,
+				metaKey: e.metaKey,
+				ctrlKey: e.ctrlKey,
+			});
+			if (selectionInteraction) {
+				flushSync(() => onSelect(selectionInteraction));
+			}
+
 			const pxPerFrame =
 				timelineDurationInFrames > 0
 					? (windowWidth - TIMELINE_PADDING * 2) / timelineDurationInFrames
@@ -1837,7 +1910,9 @@ const TimelineSequenceRightEdgeDragHandleInner: React.FC<{
 		},
 		[
 			currentSelection,
+			onSelect,
 			propStatusesRef,
+			selected,
 			sequencesRef,
 			timelineDurationInFrames,
 			windowWidth,

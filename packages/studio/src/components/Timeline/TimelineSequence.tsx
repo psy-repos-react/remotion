@@ -969,6 +969,8 @@ const TimelineSequenceInner: React.FC<{
 							windowWidth={windowWidth}
 							timelineDurationInFrames={video.durationInFrames ?? 1}
 							onDragEnd={dragAwareDoubleClick.endPointerGesture}
+							onSelect={onSelect}
+							selected={selected}
 						/>
 					) : null}
 					{showRightEdgeDragHandle &&
@@ -980,6 +982,8 @@ const TimelineSequenceInner: React.FC<{
 							windowWidth={windowWidth}
 							timelineDurationInFrames={video.durationInFrames ?? 1}
 							onDragEnd={dragAwareDoubleClick.endPointerGesture}
+							onSelect={onSelect}
+							selected={selected}
 						/>
 					) : null}
 				</>
