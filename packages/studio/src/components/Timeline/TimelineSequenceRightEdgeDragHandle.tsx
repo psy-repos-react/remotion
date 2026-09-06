@@ -3,13 +3,7 @@ import {
 	stringifySequenceExpandedRowKey,
 	stringifySequenceSubscriptionKey,
 } from '@remotion/studio-shared';
-import React, {
-	useCallback,
-	useContext,
-	useEffect,
-	useRef,
-	useState,
-} from 'react';
+import React, {useCallback, useContext, useEffect, useRef} from 'react';
 import type {
 	CanUpdateSequencePropStatus,
 	CanUpdateSequencePropStatusKeyframed,
@@ -42,13 +36,44 @@ import {
 } from './save-sequence-prop';
 import {
 	getTimelineSequenceSelectionKey,
+	shouldSelectTimelineRowOnPointerDown,
 	useCurrentTimelineSelectionStateAsRef,
 	type TimelineSelection,
+	type TimelineSelectionInteraction,
 } from './TimelineSelection';
 
 const HANDLE_INSET = 6;
 const HANDLE_OUTSET = 8;
+const timelineSequenceEdgeDragThresholdPx = 4;
 export const timelineSequenceFromDragSnapThresholdPx = 10;
+
+const getTimelineSequenceEdgeSelectionInteraction = ({
+	button,
+	selected,
+	shiftKey,
+	metaKey,
+	ctrlKey,
+}: {
+	readonly button: number;
+	readonly selected: boolean;
+	readonly shiftKey: boolean;
+	readonly metaKey: boolean;
+	readonly ctrlKey: boolean;
+}): TimelineSelectionInteraction | null => {
+	if (
+		button !== 0 ||
+		!shouldSelectTimelineRowOnPointerDown({
+			selected,
+			shiftKey,
+			metaKey,
+			ctrlKey,
+		})
+	) {
+		return null;
+	}
+
+	return {shiftKey, toggleKey: metaKey || ctrlKey};
+};
 
 const baseStyle: React.CSSProperties = {
 	position: 'absolute',
@@ -1099,7 +1124,16 @@ const TimelineSequenceLeftEdgeDragHandleInner: React.FC<{
 	readonly windowWidth: number;
 	readonly timelineDurationInFrames: number;
 	readonly onDragEnd: (wasDragged: boolean) => void;
-}> = ({nodePathInfo, windowWidth, timelineDurationInFrames, onDragEnd}) => {
+	readonly onSelect: (interaction?: TimelineSelectionInteraction) => void;
+	readonly selected: boolean;
+}> = ({
+	nodePathInfo,
+	windowWidth,
+	timelineDurationInFrames,
+	onDragEnd,
+	onSelect,
+	selected,
+}) => {
 	const {setPropStatuses, setDragOverrides, clearDragOverrides} = useContext(
 		Internals.VisualModeSettersContext,
 	);
@@ -1113,15 +1147,14 @@ const TimelineSequenceLeftEdgeDragHandleInner: React.FC<{
 	const {previewServerState} = useContext(StudioServerConnectionCtx);
 	const currentSelection = useCurrentTimelineSelectionStateAsRef();
 
-	const [dragging, setDragging] = useState(false);
+	const stopPointerSessionRef = useRef<(() => void) | null>(null);
 	const dragStateRef = useRef<{
 		initialClientX: number;
 		latestDeltaFrames: number;
 		didMove: boolean;
 		pxPerFrame: number;
 		pointerId: number;
-		button: number;
-		target: HTMLDivElement;
+		selectionInteraction: TimelineSelectionInteraction | null;
 		targets: readonly TimelineSequenceLeftEdgeDragTarget[];
 	} | null>(null);
 
@@ -1133,6 +1166,7 @@ const TimelineSequenceLeftEdgeDragHandleInner: React.FC<{
 		previewServerState,
 		overrideIdToNodePathMappings,
 		onDragEnd,
+		onSelect,
 	});
 	latestRef.current = {
 		nodePathInfo,
@@ -1142,6 +1176,7 @@ const TimelineSequenceLeftEdgeDragHandleInner: React.FC<{
 		previewServerState,
 		overrideIdToNodePathMappings,
 		onDragEnd,
+		onSelect,
 	};
 
 	const finishDrag = useCallback((commit: boolean) => {
@@ -1155,7 +1190,13 @@ const TimelineSequenceLeftEdgeDragHandleInner: React.FC<{
 		document.body.style.userSelect = '';
 		document.body.style.webkitUserSelect = '';
 		stopForcingSpecificCursor();
-		setDragging(false);
+		if (
+			commit &&
+			!dragState.didMove &&
+			dragState.selectionInteraction !== null
+		) {
+			latestRef.current.onSelect(dragState.selectionInteraction);
+		}
 
 		const {
 			setPropStatuses: latestSetPropStatuses,
@@ -1218,51 +1259,146 @@ const TimelineSequenceLeftEdgeDragHandleInner: React.FC<{
 				return;
 			}
 
+			e.stopPropagation();
+			e.preventDefault();
+
+			const selectionInteraction = getTimelineSequenceEdgeSelectionInteraction({
+				button: e.button,
+				selected,
+				shiftKey: e.shiftKey,
+				metaKey: e.metaKey,
+				ctrlKey: e.ctrlKey,
+			});
 			const pxPerFrame =
 				timelineDurationInFrames > 0
 					? (windowWidth - TIMELINE_PADDING * 2) / timelineDurationInFrames
 					: 0;
-			if (pxPerFrame <= 0) {
-				return;
-			}
+			const canCalculateDelta = Number.isFinite(pxPerFrame) && pxPerFrame > 0;
 
 			const {
 				nodePathInfo: latestNodePathInfo,
 				overrideIdToNodePathMappings: latestOverrideIdsToNodePaths,
 			} = latestRef.current;
 			const {selectedItems: latestSelectedItems} = currentSelection.current;
-			const targets = getTimelineSequenceLeftEdgeDragTargets({
-				draggedNodePathInfo: latestNodePathInfo,
-				selectedItems: latestSelectedItems,
-				sequences: sequencesRef.current,
-				overrideIdsToNodePaths: latestOverrideIdsToNodePaths,
-				propStatuses: propStatusesRef.current,
-			});
-			if (targets === null || targets.length === 0) {
-				return;
-			}
+			const targets = canCalculateDelta
+				? (getTimelineSequenceLeftEdgeDragTargets({
+						draggedNodePathInfo: latestNodePathInfo,
+						selectedItems: latestSelectedItems,
+						sequences: sequencesRef.current,
+						overrideIdsToNodePaths: latestOverrideIdsToNodePaths,
+						propStatuses: propStatusesRef.current,
+					}) ?? [])
+				: [];
 
-			e.stopPropagation();
-			e.preventDefault();
+			stopPointerSessionRef.current?.();
 			dragStateRef.current = {
 				initialClientX: e.clientX,
 				latestDeltaFrames: 0,
 				didMove: false,
-				pxPerFrame,
+				pxPerFrame: canCalculateDelta ? pxPerFrame : 1,
 				pointerId: e.pointerId,
-				button: e.button,
-				target: e.currentTarget,
+				selectionInteraction,
 				targets,
 			};
-			e.currentTarget.setPointerCapture?.(e.pointerId);
 			document.body.style.userSelect = 'none';
 			document.body.style.webkitUserSelect = 'none';
 			forceSpecificCursor('ew-resize');
-			setDragging(true);
+
+			const onMove = (pointerEvent: PointerEvent) => {
+				const dragState = dragStateRef.current;
+				if (!dragState || pointerEvent.pointerId !== dragState.pointerId) {
+					return;
+				}
+
+				const dx = pointerEvent.clientX - dragState.initialClientX;
+				const deltaFrames = Math.round(dx / dragState.pxPerFrame);
+				dragState.latestDeltaFrames = deltaFrames;
+				if (
+					Math.abs(dx) >= timelineSequenceEdgeDragThresholdPx ||
+					getTimelineSequenceLeftEdgeDragChanges({
+						targets: dragState.targets,
+						deltaFrames,
+					}).length > 0
+				) {
+					dragState.didMove = true;
+				}
+
+				for (const target of dragState.targets) {
+					const nextValues = getTimelineSequenceLeftEdgeDragValues({
+						initialDuration: target.initialDuration,
+						initialFrom: target.initialFrom,
+						initialTrimBefore: target.initialTrimBefore,
+						deltaFrames,
+						playbackRate: target.playbackRate,
+						minimumDuration: target.minimumDuration,
+					});
+					if (target.positionField !== null) {
+						latestRef.current.setDragOverrides(
+							target.nodePath,
+							target.positionField,
+							Internals.makeStaticDragOverride(nextValues.from),
+						);
+					}
+
+					latestRef.current.setDragOverrides(
+						target.nodePath,
+						'durationInFrames',
+						Internals.makeStaticDragOverride(nextValues.durationInFrames),
+					);
+					latestRef.current.setDragOverrides(
+						target.nodePath,
+						'trimBefore',
+						Internals.makeStaticDragOverride(nextValues.trimBefore),
+					);
+				}
+			};
+
+			const onUp = (pointerEvent: PointerEvent) => {
+				const dragState = dragStateRef.current;
+				if (!dragState || pointerEvent.pointerId !== dragState.pointerId) {
+					return;
+				}
+
+				// Include the release position even if the final pointermove was skipped.
+				onMove(pointerEvent);
+				finishDrag(true);
+			};
+
+			const onCancel = (pointerEvent: PointerEvent) => {
+				const dragState = dragStateRef.current;
+				if (!dragState || pointerEvent.pointerId !== dragState.pointerId) {
+					return;
+				}
+
+				finishDrag(false);
+			};
+
+			stopPointerSessionRef.current = startCapturedPointerSession({
+				event: e.nativeEvent,
+				captureTarget: e.currentTarget,
+				onMove,
+				onEnd: (reason, endEvent) => {
+					stopPointerSessionRef.current = null;
+					if (
+						(reason === 'pointerup' ||
+							reason === 'buttons-released' ||
+							(reason === 'lostpointercapture' && endEvent?.buttons === 0)) &&
+						endEvent
+					) {
+						onUp(endEvent);
+					} else if (endEvent) {
+						onCancel(endEvent);
+					} else {
+						finishDrag(false);
+					}
+				},
+			});
 		},
 		[
 			currentSelection,
+			finishDrag,
 			propStatusesRef,
+			selected,
 			sequencesRef,
 			timelineDurationInFrames,
 			windowWidth,
@@ -1270,98 +1406,11 @@ const TimelineSequenceLeftEdgeDragHandleInner: React.FC<{
 	);
 
 	useEffect(() => {
-		if (!dragging) {
-			return;
-		}
-
-		const onMove = (e: PointerEvent) => {
-			const dragState = dragStateRef.current;
-			if (!dragState || e.pointerId !== dragState.pointerId) {
-				return;
-			}
-
-			const dx = e.clientX - dragState.initialClientX;
-			const deltaFrames = Math.round(dx / dragState.pxPerFrame);
-			dragState.latestDeltaFrames = deltaFrames;
-			if (deltaFrames !== 0) {
-				dragState.didMove = true;
-			}
-
-			for (const target of dragState.targets) {
-				const nextValues = getTimelineSequenceLeftEdgeDragValues({
-					initialDuration: target.initialDuration,
-					initialFrom: target.initialFrom,
-					initialTrimBefore: target.initialTrimBefore,
-					deltaFrames,
-					playbackRate: target.playbackRate,
-					minimumDuration: target.minimumDuration,
-				});
-				if (target.positionField !== null) {
-					latestRef.current.setDragOverrides(
-						target.nodePath,
-						target.positionField,
-						Internals.makeStaticDragOverride(nextValues.from),
-					);
-				}
-
-				latestRef.current.setDragOverrides(
-					target.nodePath,
-					'durationInFrames',
-					Internals.makeStaticDragOverride(nextValues.durationInFrames),
-				);
-				latestRef.current.setDragOverrides(
-					target.nodePath,
-					'trimBefore',
-					Internals.makeStaticDragOverride(nextValues.trimBefore),
-				);
-			}
+		return () => {
+			stopPointerSessionRef.current?.();
+			stopPointerSessionRef.current = null;
 		};
-
-		const onUp = (e: PointerEvent) => {
-			const dragState = dragStateRef.current;
-			if (!dragState || e.pointerId !== dragState.pointerId) {
-				return;
-			}
-
-			// Include the release position even if the final pointermove was skipped.
-			onMove(e);
-			finishDrag(true);
-		};
-
-		const onCancel = (e: PointerEvent) => {
-			const dragState = dragStateRef.current;
-			if (!dragState || e.pointerId !== dragState.pointerId) {
-				return;
-			}
-
-			finishDrag(false);
-		};
-
-		const activeDragState = dragStateRef.current;
-		if (!activeDragState) {
-			return;
-		}
-
-		return startCapturedPointerSession({
-			event: activeDragState,
-			captureTarget: activeDragState.target,
-			onMove,
-			onEnd: (reason, endEvent) => {
-				if (
-					(reason === 'pointerup' ||
-						reason === 'buttons-released' ||
-						(reason === 'lostpointercapture' && endEvent?.buttons === 0)) &&
-					endEvent
-				) {
-					onUp(endEvent);
-				} else if (endEvent) {
-					onCancel(endEvent);
-				} else {
-					finishDrag(false);
-				}
-			},
-		});
-	}, [dragging, finishDrag]);
+	}, []);
 
 	const style: React.CSSProperties = {
 		...baseStyle,
@@ -1675,7 +1724,16 @@ const TimelineSequenceRightEdgeDragHandleInner: React.FC<{
 	readonly windowWidth: number;
 	readonly timelineDurationInFrames: number;
 	readonly onDragEnd: (wasDragged: boolean) => void;
-}> = ({nodePathInfo, windowWidth, timelineDurationInFrames, onDragEnd}) => {
+	readonly onSelect: (interaction?: TimelineSelectionInteraction) => void;
+	readonly selected: boolean;
+}> = ({
+	nodePathInfo,
+	windowWidth,
+	timelineDurationInFrames,
+	onDragEnd,
+	onSelect,
+	selected,
+}) => {
 	const {setPropStatuses, setDragOverrides, clearDragOverrides} = useContext(
 		Internals.VisualModeSettersContext,
 	);
@@ -1689,15 +1747,14 @@ const TimelineSequenceRightEdgeDragHandleInner: React.FC<{
 	const {previewServerState} = useContext(StudioServerConnectionCtx);
 	const currentSelection = useCurrentTimelineSelectionStateAsRef();
 
-	const [dragging, setDragging] = useState(false);
+	const stopPointerSessionRef = useRef<(() => void) | null>(null);
 	const dragStateRef = useRef<{
 		initialClientX: number;
 		latestDeltaFrames: number;
 		didMove: boolean;
 		pxPerFrame: number;
 		pointerId: number;
-		button: number;
-		target: HTMLDivElement;
+		selectionInteraction: TimelineSelectionInteraction | null;
 		targets: readonly TimelineSequenceDurationDragTarget[];
 	} | null>(null);
 
@@ -1710,6 +1767,7 @@ const TimelineSequenceRightEdgeDragHandleInner: React.FC<{
 		previewServerState,
 		overrideIdToNodePathMappings,
 		onDragEnd,
+		onSelect,
 	});
 	latestRef.current = {
 		nodePathInfo,
@@ -1719,6 +1777,7 @@ const TimelineSequenceRightEdgeDragHandleInner: React.FC<{
 		previewServerState,
 		overrideIdToNodePathMappings,
 		onDragEnd,
+		onSelect,
 	};
 
 	const finishDrag = useCallback((commit: boolean) => {
@@ -1732,7 +1791,13 @@ const TimelineSequenceRightEdgeDragHandleInner: React.FC<{
 		document.body.style.userSelect = '';
 		document.body.style.webkitUserSelect = '';
 		stopForcingSpecificCursor();
-		setDragging(false);
+		if (
+			commit &&
+			!dragState.didMove &&
+			dragState.selectionInteraction !== null
+		) {
+			latestRef.current.onSelect(dragState.selectionInteraction);
+		}
 
 		const {
 			setPropStatuses: latestSetPropStatuses,
@@ -1793,138 +1858,143 @@ const TimelineSequenceRightEdgeDragHandleInner: React.FC<{
 				return;
 			}
 
+			e.stopPropagation();
+			e.preventDefault();
+
+			const selectionInteraction = getTimelineSequenceEdgeSelectionInteraction({
+				button: e.button,
+				selected,
+				shiftKey: e.shiftKey,
+				metaKey: e.metaKey,
+				ctrlKey: e.ctrlKey,
+			});
 			const pxPerFrame =
 				timelineDurationInFrames > 0
 					? (windowWidth - TIMELINE_PADDING * 2) / timelineDurationInFrames
 					: 0;
-			if (pxPerFrame <= 0) {
-				return;
-			}
+			const canCalculateDelta = Number.isFinite(pxPerFrame) && pxPerFrame > 0;
 
 			const {
 				nodePathInfo: latestNodePathInfo,
 				overrideIdToNodePathMappings: latestOverrideIdsToNodePaths,
 			} = latestRef.current;
 			const {selectedItems: latestSelectedItems} = currentSelection.current;
-			const targets = getTimelineSequenceDurationDragTargets({
-				draggedNodePathInfo: latestNodePathInfo,
-				selectedItems: latestSelectedItems,
-				sequences: sequencesRef.current,
-				overrideIdsToNodePaths: latestOverrideIdsToNodePaths,
-				propStatuses: propStatusesRef.current,
-			});
-			if (targets === null || targets.length === 0) {
-				return;
-			}
+			const targets = canCalculateDelta
+				? (getTimelineSequenceDurationDragTargets({
+						draggedNodePathInfo: latestNodePathInfo,
+						selectedItems: latestSelectedItems,
+						sequences: sequencesRef.current,
+						overrideIdsToNodePaths: latestOverrideIdsToNodePaths,
+						propStatuses: propStatusesRef.current,
+					}) ?? [])
+				: [];
 
-			e.stopPropagation();
-			e.preventDefault();
+			stopPointerSessionRef.current?.();
 			dragStateRef.current = {
 				initialClientX: e.clientX,
 				latestDeltaFrames: 0,
 				didMove: false,
-				pxPerFrame,
+				pxPerFrame: canCalculateDelta ? pxPerFrame : 1,
 				pointerId: e.pointerId,
-				button: e.button,
-				target: e.currentTarget,
+				selectionInteraction,
 				targets,
 			};
-			e.currentTarget.setPointerCapture?.(e.pointerId);
 			document.body.style.userSelect = 'none';
 			document.body.style.webkitUserSelect = 'none';
 			forceSpecificCursor('ew-resize');
-			setDragging(true);
+
+			const onMove = (pointerEvent: PointerEvent) => {
+				const dragState = dragStateRef.current;
+				if (!dragState || pointerEvent.pointerId !== dragState.pointerId) {
+					return;
+				}
+
+				const dx = pointerEvent.clientX - dragState.initialClientX;
+				const deltaFrames = Math.round(dx / dragState.pxPerFrame);
+				dragState.latestDeltaFrames = deltaFrames;
+				if (
+					Math.abs(dx) >= timelineSequenceEdgeDragThresholdPx ||
+					getTimelineSequenceDurationDragChanges({
+						targets: dragState.targets,
+						deltaFrames,
+					}).length > 0
+				) {
+					dragState.didMove = true;
+				}
+
+				for (const target of dragState.targets) {
+					latestRef.current.setDragOverrides(
+						target.nodePath,
+						'durationInFrames',
+						Internals.makeStaticDragOverride(
+							getTimelineSequenceDurationDragValue({
+								initialDuration: target.initialDuration,
+								deltaFrames,
+								minimumDuration: target.minimumDuration,
+							}),
+						),
+					);
+				}
+			};
+
+			const onUp = (pointerEvent: PointerEvent) => {
+				const dragState = dragStateRef.current;
+				if (!dragState || pointerEvent.pointerId !== dragState.pointerId) {
+					return;
+				}
+
+				// Include the release position even if the final pointermove was skipped.
+				onMove(pointerEvent);
+				finishDrag(true);
+			};
+
+			const onCancel = (pointerEvent: PointerEvent) => {
+				const dragState = dragStateRef.current;
+				if (!dragState || pointerEvent.pointerId !== dragState.pointerId) {
+					return;
+				}
+
+				finishDrag(false);
+			};
+
+			stopPointerSessionRef.current = startCapturedPointerSession({
+				event: e.nativeEvent,
+				captureTarget: e.currentTarget,
+				onMove,
+				onEnd: (reason, endEvent) => {
+					stopPointerSessionRef.current = null;
+					if (
+						(reason === 'pointerup' ||
+							reason === 'buttons-released' ||
+							(reason === 'lostpointercapture' && endEvent?.buttons === 0)) &&
+						endEvent
+					) {
+						onUp(endEvent);
+					} else if (endEvent) {
+						onCancel(endEvent);
+					} else {
+						finishDrag(false);
+					}
+				},
+			});
 		},
 		[
 			currentSelection,
+			finishDrag,
 			propStatusesRef,
+			selected,
 			sequencesRef,
 			timelineDurationInFrames,
 			windowWidth,
 		],
 	);
 
-	// Install global pointer listeners while dragging. They survive parent re-renders
-	// and element remounts that would otherwise drop React's synthetic handlers or
-	// pointer capture.
 	useEffect(() => {
-		if (!dragging) {
-			return;
-		}
-
-		const onMove = (e: PointerEvent) => {
-			const dragState = dragStateRef.current;
-			if (!dragState || e.pointerId !== dragState.pointerId) {
-				return;
-			}
-
-			const dx = e.clientX - dragState.initialClientX;
-			const deltaFrames = Math.round(dx / dragState.pxPerFrame);
-			dragState.latestDeltaFrames = deltaFrames;
-			if (deltaFrames !== 0) {
-				dragState.didMove = true;
-			}
-
-			for (const target of dragState.targets) {
-				latestRef.current.setDragOverrides(
-					target.nodePath,
-					'durationInFrames',
-					Internals.makeStaticDragOverride(
-						getTimelineSequenceDurationDragValue({
-							initialDuration: target.initialDuration,
-							deltaFrames,
-							minimumDuration: target.minimumDuration,
-						}),
-					),
-				);
-			}
+		return () => {
+			stopPointerSessionRef.current?.();
+			stopPointerSessionRef.current = null;
 		};
-
-		const onUp = (e: PointerEvent) => {
-			const dragState = dragStateRef.current;
-			if (!dragState || e.pointerId !== dragState.pointerId) {
-				return;
-			}
-
-			// Include the release position even if the final pointermove was skipped.
-			onMove(e);
-			finishDrag(true);
-		};
-
-		const onCancel = (e: PointerEvent) => {
-			const dragState = dragStateRef.current;
-			if (!dragState || e.pointerId !== dragState.pointerId) {
-				return;
-			}
-
-			finishDrag(false);
-		};
-
-		const activeDragState = dragStateRef.current;
-		if (!activeDragState) {
-			return;
-		}
-
-		return startCapturedPointerSession({
-			event: activeDragState,
-			captureTarget: activeDragState.target,
-			onMove,
-			onEnd: (reason, endEvent) => {
-				if (
-					(reason === 'pointerup' ||
-						reason === 'buttons-released' ||
-						(reason === 'lostpointercapture' && endEvent?.buttons === 0)) &&
-					endEvent
-				) {
-					onUp(endEvent);
-				} else if (endEvent) {
-					onCancel(endEvent);
-				} else {
-					finishDrag(false);
-				}
-			},
-		});
-	}, [dragging, finishDrag]);
+	}, []);
 
 	const style: React.CSSProperties = {
 		...baseStyle,

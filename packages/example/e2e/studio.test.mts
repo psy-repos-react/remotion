@@ -2104,7 +2104,7 @@ export const SequenceShiftRepro = () => {
 		}
 	});
 
-	test('should apply a timeline context menu action to multiple selected sequences', async ({
+	test('should apply timeline context menu actions to multiple selected sequences', async ({
 		page,
 	}) => {
 		const sourceBefore = fs.readFileSync(sequenceShiftFile, 'utf-8');
@@ -2170,31 +2170,12 @@ export const SequenceShiftRepro = () => {
 					];
 				})
 				.toEqual([false, false]);
-		} finally {
+
 			fs.writeFileSync(sequenceShiftFile, sourceBefore);
-		}
-	});
-
-	test('should duplicate each selected timeline sequence once', async ({
-		page,
-	}) => {
-		const sourceBefore = fs.readFileSync(sequenceShiftFile, 'utf-8');
-
-		try {
-			await page.goto(`${STUDIO_URL}/sequence-shift-repro`);
-			await page.waitForFunction(
-				() => !document.body.innerText.includes('Loading...'),
-				{timeout: 30_000},
-			);
-			await page.keyboard.press('g');
-			const currentFrameInput = page.locator('input:focus');
-			await currentFrameInput.fill('22');
-			await currentFrameInput.press('Enter');
-			const outer = page.getByText('Outer frame descendant', {exact: true});
+			await expect(outer).toBeVisible({timeout: 15_000});
 			const nestedParent = page.getByText('Nested timing parent', {
 				exact: true,
 			});
-			await expect(outer).toBeVisible({timeout: 15_000});
 			await expect(nestedParent).toBeVisible();
 
 			await outer.click();
