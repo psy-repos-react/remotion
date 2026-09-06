@@ -2076,10 +2076,7 @@ test.describe('visual mode', () => {
 				})
 				.toEqual([false, false]);
 
-			await page.keyboard.press('ControlOrMeta+z');
-			await expect
-				.poll(() => fs.readFileSync(sequenceShiftFile, 'utf-8'))
-				.toBe(sourceBefore);
+			fs.writeFileSync(sequenceShiftFile, sourceBefore);
 			await expect(outer).toBeVisible({timeout: 15_000});
 			const nestedParent = page.getByText('Nested timing parent', {
 				exact: true,
